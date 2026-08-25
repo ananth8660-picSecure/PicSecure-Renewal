@@ -9,5 +9,6 @@ button,a,input,select{ -webkit-tap-highlight-color:transparent }
   .topbar{top:0;height:72px;padding-left:16px;padding-right:16px;background:rgba(7,10,16,.97);box-shadow:0 1px 0 rgba(126,151,171,.12),0 12px 34px rgba(0,0,0,.22)}
   .mobile-brand .brand-mark{width:36px;height:36px}
   .search-box input{font-size:13px}
-  .settings-drawer{padding-top:8px}
+  .capacitor-native .settings-drawer{padding-top:calc(18px + var(--ps-safe-top))}
+  .capacitor-native .drawer-head{position:sticky;top:var(--ps-safe-top);z-index:5;margin:-8px -4px 24px;padding:8px 4px 12px;background:linear-gradient(180deg,#0b0e14 72%,rgba(11,14,20,.9));backdrop-filter:blur(14px)}
 }

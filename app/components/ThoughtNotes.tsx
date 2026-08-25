@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
 
 export type ThoughtNote = {
   id:string;
@@ -51,6 +51,11 @@ function dateLabel(value:string){
 export default function ThoughtNotes({notes,onChange,onToast,onActivity}:Props){
   const [editorOpen,setEditorOpen]=useState(false),[editing,setEditing]=useState<ThoughtNote|null>(null),[query,setQuery]=useState(""),[expanded,setExpanded]=useState<Set<string>>(new Set()),[draftColor,setDraftColor]=useState(PALETTE[0]);
   const sorted=useMemo(()=>notes.filter(note=>`${note.title} ${note.body}`.toLowerCase().includes(query.trim().toLowerCase())).sort((a,b)=>Number(b.pinned)-Number(a.pinned)||new Date(b.updatedAt).getTime()-new Date(a.updatedAt).getTime()),[notes,query]);
+  useEffect(()=>{
+    const closeTopOverlay=(event:Event)=>{if(!editorOpen)return;setEditorOpen(false);setEditing(null);event.preventDefault()};
+    window.addEventListener("picsecure:close-top-overlay",closeTopOverlay);
+    return()=>window.removeEventListener("picsecure:close-top-overlay",closeTopOverlay)
+  },[editorOpen]);
 
   function openNew(){setEditing(null);setDraftColor(PALETTE[notes.length%PALETTE.length]);setEditorOpen(true)}
   function openEdit(note:ThoughtNote){setEditing(note);setDraftColor(note.color);setEditorOpen(true)}
@@ -97,4 +102,3 @@ export default function ThoughtNotes({notes,onChange,onToast,onActivity}:Props){
     </section></div>}
   </section>
 }
-
