@@ -1,0 +1,53 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "PicSecure Renew",
+  "version": "0.4.0",
+  "identifier": "com.picsecure.renew",
+  "build": {
+    "beforeDevCommand": "npm run native:dev",
+    "devUrl": "http://127.0.0.1:4174",
+    "beforeBuildCommand": "npm run native:build",
+    "frontendDist": "../dist-native"
+  },
+  "app": {
+    "withGlobalTauri": false,
+    "windows": [
+      {
+        "label": "main",
+        "title": "PicSecure Renew",
+        "width": 1440,
+        "height": 920,
+        "minWidth": 360,
+        "minHeight": 640,
+        "center": true,
+        "resizable": true,
+        "fullscreen": false,
+        "backgroundColor": "#070a10"
+      }
+    ],
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": ["nsis"],
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.ico"
+    ],
+    "windows": {
+      "webviewInstallMode": {
+        "type": "downloadBootstrapper",
+        "silent": true
+      },
+      "nsis": {
+        "installMode": "currentUser",
+        "installerIcon": "icons/icon.ico",
+        "displayLanguageSelector": false
+      }
+    }
+  }
+}

@@ -1,0 +1,17 @@
+<svg width="1120" height="260" viewBox="0 0 1120 260" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="wa" x1="18" y1="152" x2="222" y2="30" gradientUnits="userSpaceOnUse"><stop stop-color="#16D6E2"/><stop offset="1" stop-color="#68F4F2"/></linearGradient>
+    <linearGradient id="wb" x1="224" y1="105" x2="24" y2="225" gradientUnits="userSpaceOnUse"><stop stop-color="#6977F7"/><stop offset="1" stop-color="#2ABCE8"/></linearGradient>
+    <linearGradient id="ws" x1="127" y1="79" x2="176" y2="165" gradientUnits="userSpaceOnUse"><stop stop-color="#31E6E8"/><stop offset="1" stop-color="#6287FA"/></linearGradient>
+    <linearGradient id="renewWord" x1="744" y1="77" x2="1036" y2="171" gradientUnits="userSpaceOnUse"><stop stop-color="#28DDE4"/><stop offset="1" stop-color="#6877F7"/></linearGradient>
+  </defs>
+  <path d="M35 151C23.9 103.9 51.2 56 98 42.5C128.5 33.7 160.7 42 183 62.9" stroke="url(#wa)" stroke-width="20" stroke-linecap="round"/>
+  <path d="M162.8 44L198.8 73L205 27.5L162.8 44Z" fill="#66F2F0"/>
+  <path d="M201 89C212.1 136.1 184.8 184 138 197.5C107.5 206.3 75.3 198 53 177.1" stroke="url(#wb)" stroke-width="20" stroke-linecap="round"/>
+  <path d="M73.2 196L37.2 167L31 212.5L73.2 196Z" fill="#31B8E7"/>
+  <text x="70" y="164" fill="#F4FFFF" stroke="#08141C" stroke-width="3" paint-order="stroke" font-family="Inter, Arial, sans-serif" font-size="102" font-weight="820" font-style="italic" letter-spacing="-14">P</text>
+  <text x="125" y="164" fill="url(#ws)" stroke="#0A1720" stroke-width="1.5" paint-order="stroke" font-family="Inter, Arial, sans-serif" font-size="102" font-weight="820" font-style="italic" letter-spacing="-14">S</text>
+  <text x="267" y="147" fill="#F2F8FA" font-family="Inter, Arial, sans-serif" font-size="82" font-weight="740" letter-spacing="-4">PicSecure</text>
+  <text x="721" y="147" fill="url(#renewWord)" font-family="Inter, Arial, sans-serif" font-size="82" font-weight="740" letter-spacing="-4">Renew</text>
+  <text x="275" y="192" fill="#718A96" font-family="Inter, Arial, sans-serif" font-size="20" font-weight="650" letter-spacing="7">TRACK • REMIND • RENEW</text>
+</svg>

@@ -1,0 +1,13 @@
+<svg width="512" height="512" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="loopA" x1="8" y1="38" x2="53" y2="10" gradientUnits="userSpaceOnUse"><stop stop-color="#16D6E2"/><stop offset="1" stop-color="#68F4F2"/></linearGradient>
+    <linearGradient id="loopB" x1="54" y1="27" x2="11" y2="55" gradientUnits="userSpaceOnUse"><stop stop-color="#6977F7"/><stop offset="1" stop-color="#2ABCE8"/></linearGradient>
+    <linearGradient id="letterS" x1="34" y1="22" x2="47" y2="43" gradientUnits="userSpaceOnUse"><stop stop-color="#31E6E8"/><stop offset="1" stop-color="#6287FA"/></linearGradient>
+  </defs>
+  <path d="M10.5 37.3C7.6 25.1 14.7 12.7 26.8 9.2C34.7 6.9 43 9.1 48.8 14.5" stroke="url(#loopA)" stroke-width="5.3" stroke-linecap="round"/>
+  <path d="M43.6 9.6L52.9 17.1L54.5 5.3L43.6 9.6Z" fill="#65F1F0"/>
+  <path d="M53.5 26.7C56.4 38.9 49.3 51.3 37.2 54.8C29.3 57.1 21 54.9 15.2 49.5" stroke="url(#loopB)" stroke-width="5.3" stroke-linecap="round"/>
+  <path d="M20.4 54.4L11.1 46.9L9.5 58.7L20.4 54.4Z" fill="#31B8E7"/>
+  <text x="19.2" y="42.2" fill="#F4FFFF" stroke="#08141C" stroke-width="1.15" paint-order="stroke" font-family="Inter, Arial, sans-serif" font-size="27" font-weight="820" font-style="italic" letter-spacing="-3.2">P</text>
+  <text x="33.2" y="42.2" fill="url(#letterS)" stroke="#08141C" stroke-width="1.15" paint-order="stroke" font-family="Inter, Arial, sans-serif" font-size="27" font-weight="820" font-style="italic" letter-spacing="-3.2">S</text>
+</svg>

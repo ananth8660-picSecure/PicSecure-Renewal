@@ -1,0 +1,27 @@
+[package]
+name = "picsecure-renew"
+version = "0.4.0"
+description = "Private renewal tracking for Windows"
+authors = ["Ananth Reddy"]
+edition = "2021"
+rust-version = "1.77.2"
+
+[lib]
+name = "picsecure_renew_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+tauri = { version = "2", features = ["tray-icon"] }
+tauri-plugin-autostart = "2"
+tauri-plugin-notification = "2"
+
+[profile.release]
+codegen-units = 1
+lto = true
+opt-level = "z"
+panic = "abort"
+strip = true

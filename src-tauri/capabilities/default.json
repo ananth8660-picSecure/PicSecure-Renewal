@@ -1,0 +1,11 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "Permissions for the PicSecure Renew desktop window",
+  "windows": ["main"],
+  "permissions": [
+    "core:default",
+    "notification:default",
+    "autostart:default"
+  ]
+}

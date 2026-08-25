@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">PicSecure Renew</string>
+    <string name="title_activity_main">PicSecure Renew</string>
+    <string name="package_name">com.picsecure.renew</string>
+    <string name="custom_url_scheme">com.picsecure.renew</string>
+</resources>
