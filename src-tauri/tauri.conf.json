@@ -1,7 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "PicSecure Renew",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "identifier": "com.picsecure.renew",
   "build": {
     "beforeDevCommand": "npm run native:dev",

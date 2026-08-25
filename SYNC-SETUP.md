@@ -1,4 +1,4 @@
-# PicSecure Renew 0.4.0 — automatic desktop and Android sync
+# PicSecure Renew 0.4.1 — automatic desktop and Android sync
 
 PicSecure Renew keeps the local vault available offline and can automatically sync the same vault through Firebase Authentication and Cloud Firestore.
 

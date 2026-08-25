@@ -1,4 +1,4 @@
-# PicSecure Renew 0.4.0 — Cloudflare deployment
+# PicSecure Renew 0.4.1 — Cloudflare deployment
 
 Cloudflare Workers hosts both the app and its two backend routes. The Google service-account key stays in Worker secrets and is never bundled into the EXE or APK.
 

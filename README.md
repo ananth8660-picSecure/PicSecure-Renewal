@@ -103,7 +103,7 @@ The included `.github/workflows/native-release.yml` builds both targets. Add
 repository secrets `PICSECURE_API_BASE` and `FIREBASE_API_KEY`; add repository
 variables `FIREBASE_AUTH_DOMAIN`, `FIREBASE_PROJECT_ID`,
 `FIREBASE_STORAGE_BUCKET`, `FIREBASE_MESSAGING_SENDER_ID`, and
-`FIREBASE_APP_ID`. Then push a version tag such as `v0.4.0`. GitHub Releases
+`FIREBASE_APP_ID`. Then push a version tag such as `v0.4.1`. GitHub Releases
 receives the compact Windows installer and Android APK.
 
 Never commit `.env.local`, a Google service-account JSON file, a private key,

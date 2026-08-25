@@ -9,7 +9,7 @@ const config: CapacitorConfig = {
   plugins: {
     SystemBars: {
       insetsHandling: "css",
-      style: "DARK",
+      style: "LIGHT",
       hidden: false,
       animation: "NONE",
     },

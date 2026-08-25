@@ -19,6 +19,6 @@ Before pushing, confirm that `.env.local`, service-account JSON files, exported 
 For automatic EXE and APK builds, add the GitHub Actions values listed in the **Private GitHub releases** section of `README.md`, then create a release tag:
 
 ```powershell
-git tag v0.4.0
-git push origin v0.4.0
+git tag v0.4.1
+git push origin v0.4.1
 ```

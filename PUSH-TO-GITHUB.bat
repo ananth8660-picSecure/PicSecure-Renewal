@@ -18,7 +18,7 @@ if /I not "%CURRENT_REMOTE%"=="https://github.com/ananth8660-picSecure/PicSecure
   exit /b 1
 )
 
-echo Pushing PicSecure Renew v0.4.0 to GitHub...
+echo Pushing PicSecure Renew v0.4.1 to GitHub...
 git push -u origin main
 if errorlevel 1 (
   echo.

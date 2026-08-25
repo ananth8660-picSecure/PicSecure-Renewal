@@ -45,6 +45,7 @@ tsconfig.tsbuildinfo
 /android/local.properties
 /android/app/build/
 /src-tauri/target/
+/PicSecure-Renew.apk
 *.jks
 *.keystore
 /.wrangler/

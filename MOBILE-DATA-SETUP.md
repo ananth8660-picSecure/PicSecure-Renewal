@@ -1,11 +1,14 @@
-# PicSecure Renew 0.4.0 — Mobile data setup
+# PicSecure Renew 0.4.1 — Mobile data setup
 
 ## Automatic desktop ↔ Android records
 
-Renewal records remain local-first, but version 0.4.0 can sync them automatically.
+Renewal records remain local-first, but version 0.4.1 can sync them automatically.
 Complete `SYNC-SETUP.md`, then sign in from **Settings → Device sync** on Windows
 and Android with the same email and password. Existing records from the first
 device upload automatically; the second device receives them in realtime.
+
+The first native launch creates a six-digit local vault PIN. Account sign-out is
+also protected by that PIN, so an accidental tap cannot disconnect cloud sync.
 
 If cloud sync is not configured, manual backup remains available:
 
