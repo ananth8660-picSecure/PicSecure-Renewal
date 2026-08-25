@@ -1,6 +1,6 @@
 {
   "name": "picsecure-renew",
-  "version": "0.5.2",
+  "version": "0.5.3",
   "description": "A private native renewal tracker for domains, subscriptions and cloud services.",
   "author": "Ananth Reddy",
   "private": true,
@@ -21,7 +21,8 @@
     "desktop:dev": "tauri dev",
     "desktop:build": "tauri build --bundles nsis",
     "android:sync": "npm run native:build && cap sync android",
-    "android:open": "cap open android"
+    "android:open": "cap open android",
+    "android:release": "npm run android:sync && cd android && gradlew.bat clean assembleRelease"
   },
   "dependencies": {
     "@aparajita/capacitor-biometric-auth": "^10.0.0",

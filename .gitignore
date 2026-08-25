@@ -43,6 +43,7 @@ tsconfig.tsbuildinfo
 /.desktop-app/
 /android/.gradle/
 /android/local.properties
+/android/keystore.properties
 /android/app/build/
 /src-tauri/target/
 /PicSecure-Renew.apk
