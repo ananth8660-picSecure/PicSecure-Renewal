@@ -18,9 +18,9 @@ type ReadyResponse = {
 
 const DEFAULT_PROJECTS="Development:pic-dev-f28a7,Staging:YOUR_STAGING_PROJECT_ID,Production:YOUR_PRODUCTION_PROJECT_ID";
 const GB=1024**3;
-const TOKEN_TIMEOUT_MS=8_000;
-const METRIC_TIMEOUT_MS=12_000;
-const RESULT_CACHE_MS=60_000;
+const TOKEN_TIMEOUT_MS=6_000;
+const METRIC_TIMEOUT_MS=7_000;
+const RESULT_CACHE_MS=5*60_000;
 let cachedToken:{value:string;expiresAt:number}|null=null;
 const resultCache=new Map<string,{value:ReadyResponse;expiresAt:number}>();
 
@@ -99,7 +99,7 @@ export async function GET(request:NextRequest){
   if(!configured.some(p=>p.projectId===selected))return corsJson(request,{status:"error",projects:allProjects,message:"That Firebase project is not in the server allowlist."},{status:400,headers:{"Cache-Control":"no-store"}});
   const forceRefresh=request.nextUrl.searchParams.get("refresh")==="1";
   const cached=resultCache.get(selected);
-  if(!forceRefresh&&cached&&cached.expiresAt>Date.now())return corsJson(request,cached.value,{headers:{"Cache-Control":"private, max-age=30"}});
+  if(!forceRefresh&&cached&&cached.expiresAt>Date.now())return corsJson(request,cached.value,{headers:{"Cache-Control":"private, max-age=60, stale-while-revalidate=300"}});
   try{
     const now=new Date(),cycle=cycles(now),token=await accessToken(email,privateKey);
     const MB=1024**2;

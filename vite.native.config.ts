@@ -4,6 +4,7 @@ import { defineConfig, loadEnv } from "vite";
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), "VITE_");
+  const apiBase = env.VITE_PICSECURE_API_BASE || "https://renewvault.ananthcolors.chatgpt.site";
   return {
     root: "native",
     envDir: process.cwd(),
@@ -12,7 +13,7 @@ export default defineConfig(({ mode }) => {
     plugins: [react()],
     server: { host: "127.0.0.1", port: 4174, strictPort: true },
     define: {
-      __PICSECURE_API_BASE__: JSON.stringify(env.VITE_PICSECURE_API_BASE || ""),
+      __PICSECURE_API_BASE__: JSON.stringify(apiBase),
     },
     build: {
       outDir: "../dist-native",

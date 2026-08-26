@@ -14,6 +14,9 @@ type UsageResponse = {
   metrics?:UsageMetric[]; checkedAt?:string; message?:string; monitoringDelay?:string; errorCode?:string;
 };
 
+const USAGE_CACHE_KEY="picsecure-renew.firebase-usage.v1";
+const CLIENT_TIMEOUT_MS=15_000;
+
 function miniIcon(name:"database"|"function"|"storage"|"hosting"|"refresh"|"shield"){
   const paths={
     database:<><ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v6c0 1.7 3.6 3 8 3s8-1.3 8-3V5M4 11v6c0 1.7 3.6 3 8 3s8-1.3 8-3v-6"/></>,
@@ -49,8 +52,8 @@ function tone(metric:UsageMetric){
 export default function FirebaseUsage(){
   const [data,setData]=useState<UsageResponse|null>(null),[selected,setSelected]=useState(""),[loading,setLoading]=useState(true),[refreshing,setRefreshing]=useState(false),[now,setNow]=useState(0);
   const [setupProject,setSetupProject]=useState("Development"),[setupStep,setSetupStep]=useState(1),[copied,setCopied]=useState(false);
-  const load=useCallback(async(project?:string,manual=false)=>{
-    if(manual)setRefreshing(true);else setLoading(true);
+  const load=useCallback(async(project?:string,manual=false,silent=false)=>{
+    if(manual)setRefreshing(true);else if(!silent)setLoading(true);
     if(isNativeRuntime()&&!hasApiBase()){
       setData({status:"error",projects:[],errorCode:"API_BASE",message:"This APK is not connected to the PicSecure Renew HTTPS usage API yet. Open Settings → Data connection and paste the deployed API URL."});
       setLoading(false);setRefreshing(false);return;
@@ -59,13 +62,14 @@ export default function FirebaseUsage(){
       const params=new URLSearchParams();
       if(project)params.set("project",project);
       if(manual)params.set("refresh","1");
-      const response=await fetch(apiUrl(`/api/firebase-usage${params.size?`?${params}`:""}`),{cache:"no-store"});
+      const controller=new AbortController(),timeout=window.setTimeout(()=>controller.abort(),CLIENT_TIMEOUT_MS);
+      const response=await fetch(apiUrl(`/api/firebase-usage${params.size?`?${params}`:""}`),{cache:"no-store",signal:controller.signal}).finally(()=>window.clearTimeout(timeout));
       const next=await response.json() as UsageResponse;
-      setData(next);if(next.selectedProject)setSelected(next.selectedProject);else setSelected(current=>current||next.projects.find(p=>p.configured)?.projectId||"")
-    }catch{setData({status:"error",projects:[],message:"PicSecure Renew could not reach the usage service."})}
+      setData(next);if(next.status==="ready")window.localStorage.setItem(USAGE_CACHE_KEY,JSON.stringify(next));if(next.selectedProject)setSelected(next.selectedProject);else setSelected(current=>current||next.projects.find(p=>p.configured)?.projectId||"")
+    }catch{setData(current=>current||{status:"error",projects:[],message:"PicSecure Renew could not reach the usage service within 15 seconds."})}
     finally{setLoading(false);setRefreshing(false)}
   },[]);
-  useEffect(()=>{const initial=window.setTimeout(()=>{setNow(Date.now());void load()},0);const reconnect=()=>void load(undefined,true);window.addEventListener("picsecure:api-base-changed",reconnect);return()=>{clearTimeout(initial);window.removeEventListener("picsecure:api-base-changed",reconnect)}},[load]);
+  useEffect(()=>{let hasCached=false;try{const cached=JSON.parse(window.localStorage.getItem(USAGE_CACHE_KEY)||"null") as UsageResponse|null;if(cached?.status==="ready"){hasCached=true;setData(cached);setSelected(cached.selectedProject||cached.projects.find(project=>project.configured)?.projectId||"");setLoading(false)}}catch{}const initial=window.setTimeout(()=>{setNow(Date.now());void load(undefined,false,hasCached)},0);const reconnect=()=>void load(undefined,true);window.addEventListener("picsecure:api-base-changed",reconnect);return()=>{clearTimeout(initial);window.removeEventListener("picsecure:api-base-changed",reconnect)}},[load]);
   useEffect(()=>{const clock=window.setInterval(()=>setNow(Date.now()),30000);return()=>clearInterval(clock)},[]);
   const metrics=data?.metrics||[];
   const groups=useMemo(()=>[
