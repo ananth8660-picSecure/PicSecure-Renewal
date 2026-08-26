@@ -60,7 +60,7 @@ jobs:
           VITE_FIREBASE_STORAGE_BUCKET: ${{ vars.FIREBASE_STORAGE_BUCKET }}
           VITE_FIREBASE_MESSAGING_SENDER_ID: ${{ vars.FIREBASE_MESSAGING_SENDER_ID }}
           VITE_FIREBASE_APP_ID: ${{ vars.FIREBASE_APP_ID }}
-      - run: ./gradlew assembleDebug
+      - run: chmod +x gradlew && ./gradlew assembleDebug
         working-directory: android
       - run: cp android/app/build/outputs/apk/debug/app-debug.apk PicSecure-Renew.apk
       - uses: actions/upload-artifact@v4
