@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { apiUrl, hasApiBase, isNativeRuntime } from "../lib/runtime";
+import { usageApiUrl } from "../lib/runtime";
 
 type Project = { label:string; projectId:string; configured:boolean };
 type UsageMetric = {
@@ -63,7 +63,7 @@ export default function FirebaseUsage(){
       if(project)params.set("project",project);
       if(manual)params.set("refresh","1");
       const controller=new AbortController(),timeout=window.setTimeout(()=>controller.abort(),CLIENT_TIMEOUT_MS);
-      const response=await fetch(apiUrl(`/api/firebase-usage${params.size?`?${params}`:""}`),{cache:"no-store",signal:controller.signal,headers:{Accept:"application/json"}}).finally(()=>window.clearTimeout(timeout));
+      const response=await fetch(usageApiUrl(`/api/firebase-usage${params.size?`?${params}`:""}`),{cache:"no-store",signal:controller.signal,headers:{Accept:"application/json"}}).finally(()=>window.clearTimeout(timeout));
       const contentType=response.headers.get("content-type")||"";
       if(!contentType.includes("application/json"))throw new Error(`Usage API returned ${response.status} instead of JSON`);
       const next=await response.json() as UsageResponse;
