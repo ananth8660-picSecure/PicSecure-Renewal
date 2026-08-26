@@ -3,6 +3,7 @@ name: PicSecure Renew Native Release
 on:
   workflow_dispatch:
   push:
+    branches: [main]
     tags: ["v*"]
 
 permissions:
