@@ -14,6 +14,7 @@ export default defineConfig(({ mode }) => {
     server: { host: "127.0.0.1", port: 4174, strictPort: true },
     define: {
       __PICSECURE_API_BASE__: JSON.stringify(apiBase),
+      __PICSECURE_BUILD_TIME__: JSON.stringify(new Date().toISOString()),
     },
     build: {
       outDir: "../dist-native",
