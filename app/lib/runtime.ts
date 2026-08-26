@@ -1,5 +1,5 @@
 const API_BASE_KEY = "picsecure-renew.api-base";
-export const DEFAULT_NATIVE_API_BASE = "https://renewvault.ananthcolors.chatgpt.site";
+export const DEFAULT_NATIVE_API_BASE = "https://renewvault.ananthcolors.chatgpt.site";\nexport const FIREBASE_USAGE_API_BASE = "https://picsecure-usage-api.ananthcolors.chatgpt.site";
 
 function normalized(value: string | undefined | null) {
   return value?.trim().replace(/\/$/, "") || "";
@@ -31,7 +31,7 @@ export function apiUrl(path: string) {
   return base ? `${base}${path}` : path;
 }
 
-export function isNativeRuntime() {
+export function usageApiUrl(path: string) {\n  if (!path.startsWith("/")) throw new Error("API paths must begin with /");\n  return `${FIREBASE_USAGE_API_BASE}${path}`;\n}\n\nexport function isNativeRuntime() {
   if (typeof window === "undefined") return false;
   const nativePlatform = (window as Window & { Capacitor?: { isNativePlatform?: () => boolean } }).Capacitor?.isNativePlatform?.();
   return Boolean(nativePlatform || window.picSecureDesktop || window.__TAURI_INTERNALS__ || window.location.protocol === "capacitor:");
