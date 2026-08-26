@@ -1,6 +1,6 @@
 import { ReactNode, useCallback, useEffect, useState } from "react";
 import { App } from "@capacitor/app";
-import { Capacitor, registerPlugin } from "@capacitor/core";
+import { Capacitor, CapacitorHttp, registerPlugin } from "@capacitor/core";
 import { APP_VERSION } from "../app/lib/app-version";
 import { isCurrentRelease } from "../app/lib/update-build";
 
@@ -20,9 +20,33 @@ const RELEASE_API="https://api.github.com/repos/ananth8660-picSecure/PicSecure-R
 const MANIFEST_ASSET="PicSecure-Renew-update.json";
 const REMIND_KEY="picsecure-renew.update-reminder.v1";
 const SIX_HOURS=6*60*60*1000;
+const REQUEST_TIMEOUT=15_000;
 
 function readableSize(bytes:number){return `${Math.max(1,Math.round(bytes/1024/1024))} MB`}
 function announce(detail:UpdateState){window.dispatchEvent(new CustomEvent<UpdateState>("picsecure:update-status",{detail}))}
+function parseJson<T>(value:unknown):T{
+  if(typeof value==="string")return JSON.parse(value) as T;
+  return value as T;
+}
+async function getJson<T>(url:string,headers:Record<string,string>={}):Promise<T>{
+  if(Capacitor.isNativePlatform()){
+    const response=await CapacitorHttp.get({url,headers,connectTimeout:REQUEST_TIMEOUT,readTimeout:REQUEST_TIMEOUT,responseType:"json"});
+    if(response.status<200||response.status>=300)throw new Error(`Update service returned ${response.status}`);
+    return parseJson<T>(response.data);
+  }
+  const controller=new AbortController(),timer=window.setTimeout(()=>controller.abort(),REQUEST_TIMEOUT);
+  try{
+    const response=await fetch(url,{headers,cache:"no-store",signal:controller.signal});
+    if(!response.ok)throw new Error(`Update service returned ${response.status}`);
+    return await response.json() as T;
+  }finally{window.clearTimeout(timer)}
+}
+function friendlyUpdateError(error:unknown){
+  const message=error instanceof Error?error.message:"Could not check for updates.";
+  if(error instanceof Error&&error.name==="AbortError")return "The update check timed out. Check your internet connection and try again.";
+  if(/failed to fetch|network request failed|networkerror|load failed|unable to resolve host|connection (?:reset|refused)/i.test(message))return "Could not reach the secure update service. Check your internet connection and try again.";
+  return message;
+}
 
 export default function AppUpdateChecker({children}:{children:ReactNode}){
   const [update,setUpdate]=useState<AvailableUpdate|null>(null),[installState,setInstallState]=useState<"idle"|"downloading"|"installing">("idle"),[error,setError]=useState("");
@@ -32,15 +56,11 @@ export default function AppUpdateChecker({children}:{children:ReactNode}){
     try{
       currentVersion=Capacitor.isNativePlatform()?(await App.getInfo()).version:APP_VERSION;
       announce({state:"checking",message:"Checking the verified GitHub release…",version:currentVersion});
-      const response=await fetch(RELEASE_API,{headers:{Accept:"application/vnd.github+json"},cache:"no-store"});
-      if(!response.ok)throw new Error(`Update service returned ${response.status}`);
-      const release=await response.json() as GitHubRelease;
+      const release=await getJson<GitHubRelease>(RELEASE_API,{Accept:"application/vnd.github+json","X-GitHub-Api-Version":"2022-11-28"});
       const android=Capacitor.isNativePlatform()&&Capacitor.getPlatform()==="android";
       const manifestAsset=release.assets.find(item=>item.name===MANIFEST_ASSET);
       if(!manifestAsset)throw new Error("Verified update information is not available yet.");
-      const manifestResponse=await fetch(`${manifestAsset.browser_download_url}?t=${Date.now()}`,{cache:"no-store"});
-      if(!manifestResponse.ok)throw new Error(`Update information returned ${manifestResponse.status}`);
-      const manifest=await manifestResponse.json() as UpdateManifest;
+      const manifest=await getJson<UpdateManifest>(`${manifestAsset.browser_download_url}?t=${Date.now()}`,{Accept:"application/json"});
       if(manifest.schemaVersion!==1||!manifest.buildId||!manifest.version)throw new Error("Verified update information is invalid.");
       const assetName=android?manifest.platforms?.android?.assetName:manifest.platforms?.windows?.assetName;
       const asset=release.assets.find(item=>item.name===assetName);
@@ -55,7 +75,7 @@ export default function AppUpdateChecker({children}:{children:ReactNode}){
       }
       setError("");setUpdate({asset,currentVersion,latestVersion:manifest.version});announce({state:"available",message:`Version ${manifest.version} is ready to install.`,version:currentVersion});
     }catch(nextError){
-      const message=nextError instanceof Error?nextError.message:"Could not check for updates.";
+      const message=friendlyUpdateError(nextError);
       announce({state:"error",message,version:currentVersion});
     }
   },[]);
@@ -97,7 +117,7 @@ export default function AppUpdateChecker({children}:{children:ReactNode}){
 
   return <>{children}{update&&<div className="native-update-backdrop">
     <section className="native-update-card" role="dialog" aria-modal="true" aria-labelledby="native-update-title">
-      <div className="native-update-orbit"><span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12m0 0 5-5m-5 5-5-5M5 21h14"/></svg></span></div>
+      <div className="native-update-orbit"><span><img src="./picsecure-renew-logo-512.png" alt=""/></span></div>
       <p>PICSECURE VERIFIED UPDATE</p><h2 id="native-update-title">A fresh build is ready</h2>
       <p className="native-update-copy">{Capacitor.getPlatform()==="android"?"Download stays inside PicSecure Renew cache. Android will only show the final secure installation confirmation.":"Download the verified Windows installer and continue the secure update."}</p>
       <div className="native-update-meta"><span><small>INSTALLED</small><strong>v{update.currentVersion}</strong></span><i/><span><small>AVAILABLE</small><strong>v{update.latestVersion} · {readableSize(update.asset.size)}</strong></span></div>

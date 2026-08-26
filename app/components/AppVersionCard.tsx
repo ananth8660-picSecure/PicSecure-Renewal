@@ -25,7 +25,7 @@ export default function AppVersionCard(){
   const busy=status.state==="checking"||status.state==="downloading"||status.state==="installing";
   const label=status.state==="checking"?"Checking…":status.state==="downloading"?"Downloading update…":status.state==="installing"?"Preparing installer…":"Check for updates";
   return <section className="app-version-card">
-    <div className="app-version-mark">PS</div><div className="app-version-copy"><strong>PicSecure Renew</strong><small>Installed version · v{status.version||APP_VERSION}</small>{status.message&&<p className={`update-inline ${status.state}`}>{status.message}</p>}</div>
+    <div className="app-version-mark"><img src="./picsecure-renew-logo-512.png" alt=""/></div><div className="app-version-copy"><strong>PicSecure Renew</strong><small>Installed version · v{status.version||APP_VERSION}</small>{status.message&&<p className={`update-inline ${status.state}`}>{status.message}</p>}</div>
     <button type="button" onClick={()=>void check()} disabled={busy}>{busy?<i className="mini-spinner"/>:null}{label}</button>
   </section>;
 }
