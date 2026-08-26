@@ -54,10 +54,6 @@ export default function FirebaseUsage(){
   const [setupProject,setSetupProject]=useState("Development"),[setupStep,setSetupStep]=useState(1),[copied,setCopied]=useState(false);
   const load=useCallback(async(project?:string,manual=false,silent=false)=>{
     if(manual)setRefreshing(true);else if(!silent)setLoading(true);
-    if(isNativeRuntime()&&!hasApiBase()){
-      setData({status:"error",projects:[],errorCode:"API_BASE",message:"This APK is not connected to the PicSecure Renew HTTPS usage API yet. Open Settings → Data connection and paste the deployed API URL."});
-      setLoading(false);setRefreshing(false);return;
-    }
     try{
       const params=new URLSearchParams();
       if(project)params.set("project",project);
