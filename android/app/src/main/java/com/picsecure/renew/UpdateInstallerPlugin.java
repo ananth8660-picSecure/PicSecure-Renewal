@@ -22,6 +22,12 @@ import java.util.concurrent.Executors;
 public class UpdateInstallerPlugin extends Plugin {
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
 
+    @Override
+    public void load() {
+        super.load();
+        executor.execute(this::clearCachedUpdates);
+    }
+
     @PluginMethod
     public void installApk(PluginCall call) {
         String source = call.getString("url", "");
@@ -47,6 +53,7 @@ public class UpdateInstallerPlugin extends Plugin {
         try {
             File updates = new File(getContext().getCacheDir(), "verified-updates");
             if (!updates.exists() && !updates.mkdirs()) throw new IllegalStateException("Update cache could not be created.");
+            clearCachedUpdates();
             File apk = new File(updates, fileName);
             connection = (HttpURLConnection) new URL(source).openConnection();
             connection.setInstanceFollowRedirects(true);
@@ -80,6 +87,17 @@ public class UpdateInstallerPlugin extends Plugin {
             call.reject(error.getMessage() == null ? "Update download failed." : error.getMessage(), error);
         } finally {
             if (connection != null) connection.disconnect();
+        }
+    }
+
+    private void clearCachedUpdates() {
+        File updates = new File(getContext().getCacheDir(), "verified-updates");
+        File[] cachedFiles = updates.listFiles();
+        if (cachedFiles == null) return;
+        for (File cachedFile : cachedFiles) {
+            if (cachedFile.isFile() && !cachedFile.delete()) {
+                cachedFile.deleteOnExit();
+            }
         }
     }
 

@@ -2,18 +2,22 @@ import { ReactNode, useCallback, useEffect, useState } from "react";
 import { App } from "@capacitor/app";
 import { Capacitor, registerPlugin } from "@capacitor/core";
 import { APP_VERSION } from "../app/lib/app-version";
+import { isCurrentRelease } from "../app/lib/update-build";
 
 declare const __PICSECURE_BUILD_TIME__: string;
+declare const __PICSECURE_BUILD_ID__: string;
 
 type ReleaseAsset={id:number;name:string;size:number;updated_at:string;browser_download_url:string};
 type GitHubRelease={assets:ReleaseAsset[]};
-type AvailableUpdate={asset:ReleaseAsset;currentVersion:string};
+type UpdateManifest={schemaVersion:number;buildId:string;version:string;generatedAt:string;platforms:{android:{assetName:string;versionCode:number};windows:{assetName:string}}};
+type AvailableUpdate={asset:ReleaseAsset;currentVersion:string;latestVersion:string};
 type InstallResult={status:"installer_opened"|"permission_required"};
 type UpdateInstallerPlugin={installApk(options:{url:string;fileName:string}):Promise<InstallResult>};
 type UpdateState={state:"idle"|"checking"|"available"|"current"|"downloading"|"installing"|"error";message?:string;version?:string};
 
 const UpdateInstaller=registerPlugin<UpdateInstallerPlugin>("UpdateInstaller");
 const RELEASE_API="https://api.github.com/repos/ananth8660-picSecure/PicSecure-Renewal/releases/tags/latest-native";
+const MANIFEST_ASSET="PicSecure-Renew-update.json";
 const REMIND_KEY="picsecure-renew.update-reminder.v1";
 const SIX_HOURS=6*60*60*1000;
 
@@ -32,15 +36,24 @@ export default function AppUpdateChecker({children}:{children:ReactNode}){
       if(!response.ok)throw new Error(`Update service returned ${response.status}`);
       const release=await response.json() as GitHubRelease;
       const android=Capacitor.isNativePlatform()&&Capacitor.getPlatform()==="android";
-      const asset=release.assets.find(item=>item.name===(android?"PicSecure-Renew.apk":"PicSecure-Renew-Windows.exe"));
-      if(!asset||new Date(asset.updated_at).getTime()<=new Date(__PICSECURE_BUILD_TIME__).getTime()){
-        announce({state:"current",message:"You already have the latest available build.",version:currentVersion});return;
+      const manifestAsset=release.assets.find(item=>item.name===MANIFEST_ASSET);
+      if(!manifestAsset)throw new Error("Verified update information is not available yet.");
+      const manifestResponse=await fetch(`${manifestAsset.browser_download_url}?t=${Date.now()}`,{cache:"no-store"});
+      if(!manifestResponse.ok)throw new Error(`Update information returned ${manifestResponse.status}`);
+      const manifest=await manifestResponse.json() as UpdateManifest;
+      if(manifest.schemaVersion!==1||!manifest.buildId||!manifest.version)throw new Error("Verified update information is invalid.");
+      const assetName=android?manifest.platforms?.android?.assetName:manifest.platforms?.windows?.assetName;
+      const asset=release.assets.find(item=>item.name===assetName);
+      if(!asset)throw new Error("The verified installer is not available yet.");
+      if(isCurrentRelease({currentBuildId:__PICSECURE_BUILD_ID__,currentBuildTime:__PICSECURE_BUILD_TIME__,latestBuildId:manifest.buildId,generatedAt:manifest.generatedAt})){
+        setUpdate(null);setError("");localStorage.removeItem(REMIND_KEY);
+        announce({state:"current",message:"Everything is up to date. No updates available.",version:currentVersion});return;
       }
       if(!manual){
         const reminder=JSON.parse(localStorage.getItem(REMIND_KEY)||"null") as {assetId?:number;until?:number}|null;
         if(reminder?.assetId===asset.id&&Number(reminder.until)>Date.now())return;
       }
-      setError("");setUpdate({asset,currentVersion});announce({state:"available",message:"A newer Android build is ready to install.",version:currentVersion});
+      setError("");setUpdate({asset,currentVersion,latestVersion:manifest.version});announce({state:"available",message:`Version ${manifest.version} is ready to install.`,version:currentVersion});
     }catch(nextError){
       const message=nextError instanceof Error?nextError.message:"Could not check for updates.";
       announce({state:"error",message,version:currentVersion});
@@ -87,7 +100,7 @@ export default function AppUpdateChecker({children}:{children:ReactNode}){
       <div className="native-update-orbit"><span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12m0 0 5-5m-5 5-5-5M5 21h14"/></svg></span></div>
       <p>PICSECURE VERIFIED UPDATE</p><h2 id="native-update-title">A fresh build is ready</h2>
       <p className="native-update-copy">{Capacitor.getPlatform()==="android"?"Download stays inside PicSecure Renew cache. Android will only show the final secure installation confirmation.":"Download the verified Windows installer and continue the secure update."}</p>
-      <div className="native-update-meta"><span><small>INSTALLED</small><strong>v{update.currentVersion}</strong></span><i/><span><small>UPDATE SIZE</small><strong>{readableSize(update.asset.size)}</strong></span></div>
+      <div className="native-update-meta"><span><small>INSTALLED</small><strong>v{update.currentVersion}</strong></span><i/><span><small>AVAILABLE</small><strong>v{update.latestVersion} · {readableSize(update.asset.size)}</strong></span></div>
       {error&&<p className="native-update-error">{error}</p>}
       <button className="native-update-primary" onClick={()=>void downloadAndInstall()} disabled={installState!=="idle"}>{installState==="downloading"?"Downloading securely…":installState==="installing"?"Opening installer…":"Download & install"}<span>{installState==="idle"?"↓":""}</span></button>
       <button className="native-update-later" onClick={remindLater} disabled={installState!=="idle"}>Remind me later</button>

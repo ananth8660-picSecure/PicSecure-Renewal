@@ -1,6 +1,6 @@
 {
   "name": "picsecure-renew",
-  "version": "0.5.9",
+  "version": "0.6.0",
   "description": "A private native renewal tracker for domains, subscriptions and cloud services.",
   "author": "Ananth Reddy",
   "private": true,
@@ -13,7 +13,7 @@
     "build": "vinext build",
     "cloudflare:deploy": "npm run build && wrangler deploy --config dist/server/wrangler.json",
     "start": "vinext start",
-    "test": "npm run build && node --test tests/rendered-html.test.mjs",
+    "test": "npm run build && node --test tests/rendered-html.test.mjs tests/update-build.test.mjs",
     "lint": "bash scripts/sites-env.sh -- eslint . --ignore-pattern dist --ignore-pattern .next",
     "db:generate": "bash scripts/sites-env.sh -- drizzle-kit generate",
     "native:dev": "vite --config vite.native.config.ts",

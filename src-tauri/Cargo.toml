@@ -1,6 +1,6 @@
 [package]
 name = "picsecure-renew"
-version = "0.5.9"
+version = "0.6.0"
 description = "Private renewal tracking for Windows"
 authors = ["Ananth Reddy"]
 edition = "2021"
