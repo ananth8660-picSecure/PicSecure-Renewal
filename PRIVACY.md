@@ -80,4 +80,4 @@ This Privacy Policy may be updated when application functionality or service int
 For privacy questions or data-deletion requests, contact:
 
 **Ananth Reddy**
-**Email:** [ananth8660@gmail.com](mailto:ananth8660@gmail.com)
+**Email:** [hello.team@picsecure.in](hello.team@picsecure.in)
