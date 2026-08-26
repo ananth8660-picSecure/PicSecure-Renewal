@@ -63,9 +63,20 @@ jobs:
           VITE_FIREBASE_STORAGE_BUCKET: ${{ vars.FIREBASE_STORAGE_BUCKET }}
           VITE_FIREBASE_MESSAGING_SENDER_ID: ${{ vars.FIREBASE_MESSAGING_SENDER_ID }}
           VITE_FIREBASE_APP_ID: ${{ vars.FIREBASE_APP_ID }}
-      - run: chmod +x gradlew && ./gradlew assembleDebug
+      - name: Configure private Android release signing
+        shell: bash
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          test -n "$ANDROID_KEYSTORE_BASE64"
+          printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 --decode > android/picsecure-release.jks
+          printf 'storeFile=../picsecure-release.jks\nstorePassword=%s\nkeyAlias=%s\nkeyPassword=%s\n' "$ANDROID_KEYSTORE_PASSWORD" "$ANDROID_KEY_ALIAS" "$ANDROID_KEY_PASSWORD" > android/keystore.properties
+      - run: chmod +x gradlew && ./gradlew clean assembleRelease
         working-directory: android
-      - run: cp android/app/build/outputs/apk/debug/app-debug.apk PicSecure-Renew.apk
+      - run: cp android/app/build/outputs/apk/release/app-release.apk PicSecure-Renew.apk
       - uses: actions/upload-artifact@v4
         with:
           name: PicSecure-Renew-Android
