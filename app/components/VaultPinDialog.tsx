@@ -5,11 +5,12 @@ import { createVaultPin, verifyVaultPin } from "../lib/vault-pin";
 
 type VaultPinDialogProps={
   mode:"setup"|"verify";
+  purpose?:"signout"|"api";
   onCancel?:()=>void;
   onVerified:()=>void|Promise<void>;
 };
 
-export default function VaultPinDialog({mode,onCancel,onVerified}:VaultPinDialogProps){
+export default function VaultPinDialog({mode,purpose="signout",onCancel,onVerified}:VaultPinDialogProps){
   const [pin,setPin]=useState(""),[confirm,setConfirm]=useState(""),[error,setError]=useState(""),[busy,setBusy]=useState(false),[attempts,setAttempts]=useState(0);
   const setup=mode==="setup";
   async function submit(event:FormEvent){
@@ -31,14 +32,14 @@ export default function VaultPinDialog({mode,onCancel,onVerified}:VaultPinDialog
     <section className="vault-pin-dialog" role="dialog" aria-modal="true" aria-labelledby="vault-pin-title" onMouseDown={event=>event.stopPropagation()}>
       <div className="vault-pin-orbit"><span>PS</span></div>
       <p className="vault-pin-eyebrow">{setup?"PRIVATE VAULT SECURITY":"PROTECTED ACTION"}</p>
-      <h2 id="vault-pin-title">{setup?"Create your 6-digit PIN":"Verify before signing out"}</h2>
-      <p className="vault-pin-copy">{setup?"This PIN protects your vault on this device and is required before account sign-out.":"Enter your PicSecure PIN. Your cloud account stays connected until verification succeeds."}</p>
+      <h2 id="vault-pin-title">{setup?"Create your 6-digit PIN":purpose==="api"?"Unlock API settings":"Verify before signing out"}</h2>
+      <p className="vault-pin-copy">{setup?"This PIN protects sensitive vault actions on this device.":purpose==="api"?"Enter your PicSecure PIN to temporarily edit the protected Usage API address.":"Enter your PicSecure PIN. Your cloud account stays connected until verification succeeds."}</p>
       <form onSubmit={submit} className="vault-pin-form">
         <label><span>{setup?"Create PIN":"Current PIN"}</span><input autoFocus inputMode="numeric" autoComplete={setup?"new-password":"current-password"} type="password" maxLength={6} pattern="[0-9]{6}" value={pin} onChange={event=>setPin(event.target.value.replace(/\D/g,"").slice(0,6))} aria-label={setup?"Create six digit PIN":"Current six digit PIN"}/></label>
         {setup&&<label><span>Confirm PIN</span><input inputMode="numeric" autoComplete="new-password" type="password" maxLength={6} pattern="[0-9]{6}" value={confirm} onChange={event=>setConfirm(event.target.value.replace(/\D/g,"").slice(0,6))} aria-label="Confirm six digit PIN"/></label>}
         {error&&<p className="vault-pin-error">{error}</p>}
-        <button className="vault-pin-primary" disabled={busy||pin.length!==6||Boolean(setup&&confirm.length!==6)}>{busy?"Verifying…":setup?"Secure my vault":"Verify & sign out"}</button>
-        {!setup&&onCancel&&<button type="button" className="vault-pin-cancel" onClick={onCancel}>Keep me signed in</button>}
+        <button className="vault-pin-primary" disabled={busy||pin.length!==6||Boolean(setup&&confirm.length!==6)}>{busy?"Verifying…":setup?"Secure my vault":purpose==="api"?"Verify & unlock":"Verify & sign out"}</button>
+        {!setup&&onCancel&&<button type="button" className="vault-pin-cancel" onClick={onCancel}>{purpose==="api"?"Keep API locked":"Keep me signed in"}</button>}
       </form>
       <small>Only a salted verification hash stays on this device. Your PIN is never uploaded.</small>
     </section>
