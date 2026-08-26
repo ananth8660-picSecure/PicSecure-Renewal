@@ -24,6 +24,7 @@ const KEYS={items:"renewvault.items.v2",activity:"renewvault.activity.v2",profil
 const DEFAULT_PROFILE:Profile={name:"Ananth",vaultName:"Personal vault"};
 const DEFAULT_SETTINGS:Settings={smartReminders:true,registryRefresh:true,headerShortcut:"reminders",bottomShortcut:"notes"};
 const ACCENTS=["#18d8e7","#8f7dff","#ff9f43","#42d392","#4c9cff","#f46f9b"];
+// Rolling GitHub release assets keep the in-app download buttons stable.
 const WINDOWS_DOWNLOAD="https://github.com/ananth8660-picSecure/PicSecure-Renewal/releases/download/latest-native/PicSecure-Renew-Windows.exe";
 const ANDROID_DOWNLOAD="https://github.com/ananth8660-picSecure/PicSecure-Renewal/releases/download/latest-native/PicSecure-Renew.apk";
 const SHORTCUTS:Record<ShortcutView,{label:string;icon:string;description:string}>={
@@ -62,7 +63,8 @@ export default function Home(){
   const [view,setView]=useState<View>("overview"),[activeFilter,setActiveFilter]=useState("all"),[search,setSearch]=useState(""),[modalOpen,setModalOpen]=useState(false),[editing,setEditing]=useState<Renewal|null>(null);
   const [settingsOpen,setSettingsOpen]=useState(false),[profileMenu,setProfileMenu]=useState(false),[profileOpen,setProfileOpen]=useState(false),[mobileMoreOpen,setMobileMoreOpen]=useState(false),[syncing,setSyncing]=useState(false),[saving,setSaving]=useState(false),[toast,setToast]=useState(""),[mounted,setMounted]=useState(false),[draftType,setDraftType]=useState<RenewalType>("Domain"),[preset,setPreset]=useState<"custom"|"godaddy"|"zoho">("custom"),[apiBaseDraft,setApiBaseDraft]=useState("");
   const importRef=useRef<HTMLInputElement>(null),searchRef=useRef<HTMLInputElement>(null);
-  const applyCloudVault=useCallback((vault:CloudVault)=>{setItems(vault.items as Renewal[]);setLog(vault.log as Activity[]);setProfile(vault.profile as Profile);setSettings(normalizeSettings(vault.settings));setNotes(Array.isArray(vault.notes)?vault.notes as ThoughtNote[]:[]);setToast("Latest cloud vault received")},[]);\n  const updateNotes=useCallback((next:ThoughtNote[])=>{localStorage.setItem(KEYS.notes,JSON.stringify(next));setNotes(next)},[]);
+  const applyCloudVault=useCallback((vault:CloudVault)=>{setItems(vault.items as Renewal[]);setLog(vault.log as Activity[]);setProfile(vault.profile as Profile);setSettings(normalizeSettings(vault.settings));setNotes(Array.isArray(vault.notes)?vault.notes as ThoughtNote[]:[]);setToast("Latest cloud vault received")},[]);
+  const updateNotes=useCallback((next:ThoughtNote[])=>{localStorage.setItem(KEYS.notes,JSON.stringify(next));setNotes(next)},[]);
   const cloudSync=useCloudVaultSync({items,log,profile,settings,notes},mounted,applyCloudVault);
 
   useEffect(()=>{
