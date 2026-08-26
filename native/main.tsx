@@ -4,6 +4,7 @@ import { App } from "@capacitor/app";
 import { Capacitor } from "@capacitor/core";
 import Home from "../app/page";
 import AppLock from "./AppLock";
+import AppUpdateChecker from "./AppUpdateChecker";
 import "../app/globals.css";
 import "./native.css";
 
@@ -14,7 +15,7 @@ if(Capacitor.isNativePlatform())document.documentElement.classList.add("capacito
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
-    <AppLock><Home /></AppLock>
+    <AppLock><AppUpdateChecker><Home /></AppUpdateChecker></AppLock>
   </StrictMode>,
 );
 
