@@ -1,6 +1,6 @@
 {
   "name": "picsecure-renew",
-  "version": "0.5.7",
+  "version": "0.5.8",
   "description": "A private native renewal tracker for domains, subscriptions and cloud services.",
   "author": "Ananth Reddy",
   "private": true,
