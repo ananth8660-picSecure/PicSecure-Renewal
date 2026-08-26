@@ -24,8 +24,8 @@ const KEYS={items:"renewvault.items.v2",activity:"renewvault.activity.v2",profil
 const DEFAULT_PROFILE:Profile={name:"Ananth",vaultName:"Personal vault"};
 const DEFAULT_SETTINGS:Settings={smartReminders:true,registryRefresh:true,headerShortcut:"reminders",bottomShortcut:"notes"};
 const ACCENTS=["#18d8e7","#8f7dff","#ff9f43","#42d392","#4c9cff","#f46f9b"];
-const WINDOWS_DOWNLOAD="https://github.com/ananth8660-picSecure/PicSecure-Renewal/releases/latest/download/PicSecure-Renew-Windows.exe";
-const ANDROID_DOWNLOAD="https://github.com/ananth8660-picSecure/PicSecure-Renewal/releases/latest/download/PicSecure-Renew.apk";
+const WINDOWS_DOWNLOAD="https://github.com/ananth8660-picSecure/PicSecure-Renewal/releases/download/latest-native/PicSecure-Renew-Windows.exe";
+const ANDROID_DOWNLOAD="https://github.com/ananth8660-picSecure/PicSecure-Renewal/releases/download/latest-native/PicSecure-Renew.apk";
 const SHORTCUTS:Record<ShortcutView,{label:string;icon:string;description:string}>={
   reminders:{label:"Alerts",icon:"bell",description:"Renewal reminders"},
   notes:{label:"Thoughts",icon:"note",description:"Private ideas & notes"},
