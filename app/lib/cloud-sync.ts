@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createUserWithEmailAndPassword, onAuthStateChanged, sendPasswordResetEmail, signInWithEmailAndPassword, signOut, User } from "firebase/auth";
-import { doc, onSnapshot, serverTimestamp, setDoc } from "firebase/firestore";
+import { doc, onSnapshot, serverTimestamp, setDoc, updateDoc } from "firebase/firestore";
 import { getFirebaseServices, isFirebaseSyncConfigured } from "./firebase-client";
 
 export type CloudVault = { items:unknown[]; log:unknown[]; profile:unknown; settings:unknown; notes:unknown[] };
@@ -53,7 +53,7 @@ export function useCloudVaultSync(vault:CloudVault,ready:boolean,applyRemote:(va
     setStatus("syncing");setError("");
     try{
       const {db}=await getFirebaseServices();
-      await setDoc(doc(db,"users",active.uid,"vault","main"),{schemaVersion:4,vault:current,updatedAt:serverTimestamp(),updatedBy:deviceId()},{merge:true});
+      await setDoc(doc(db,"users",active.uid,"vault","main"),{schemaVersion:5,vault:current,updatedAt:serverTimestamp(),updatedBy:deviceId()},{merge:true});
       lastCloudHashRef.current=currentHash;setLastSyncedAt(new Date().toISOString());setStatus(navigator.onLine?"synced":"offline");
     }catch(nextError){setError(friendlyError(nextError));setStatus(navigator.onLine?"error":"offline");throw nextError}
   },[]);
@@ -74,11 +74,22 @@ export function useCloudVaultSync(vault:CloudVault,ready:boolean,applyRemote:(va
             if(!snapshot.metadata.fromCache)void push(true).catch(()=>undefined);
             return;
           }
-          const remote=snapshot.data().vault;
+          const snapshotData=snapshot.data(),remote=snapshotData.vault;
           if(!isCloudVault(remote))return;
-          const normalized=normalizeVault(remote,vaultRef.current.notes),remoteHash=hashVault(normalized),localHash=hashVault(vaultRef.current);
+          const remoteHasNotes=Array.isArray((remote as Partial<CloudVault>).notes);
+          const localNotes=vaultRef.current.notes;
+          const normalized=normalizeVault(remote,localNotes),remoteHash=hashVault(normalized),localHash=hashVault(vaultRef.current);
           lastCloudHashRef.current=remoteHash;cloudReadyRef.current=true;
           if(remoteHash!==localHash){pendingRemoteHashRef.current=remoteHash;applyRemoteRef.current(normalized)}
+          // Vaults created before Thoughts existed have no `vault.notes` field.
+          // Migrate only that field so an older cloud snapshot can never erase
+          // notes which already live in this browser. The following snapshot
+          // then distributes them to Android and Windows in real time.
+          if(!remoteHasNotes&&localNotes.length){
+            setStatus("syncing");
+            void updateDoc(vaultDoc,{"vault.notes":localNotes,schemaVersion:5,updatedAt:serverTimestamp(),updatedBy:deviceId()})
+              .catch(nextError=>{setError(friendlyError(nextError));setStatus(navigator.onLine?"error":"offline")});
+          }
           setLastSyncedAt(new Date().toISOString());setStatus(snapshot.metadata.fromCache?"offline":"synced");setError("");
         },nextError=>{setError(friendlyError(nextError));setStatus(navigator.onLine?"error":"offline")});
       });

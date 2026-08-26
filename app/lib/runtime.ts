@@ -1,4 +1,5 @@
 const API_BASE_KEY = "picsecure-renew.api-base";
+export const DEFAULT_NATIVE_API_BASE = "https://renewvault.ananthcolors.chatgpt.site";
 
 function normalized(value: string | undefined | null) {
   return value?.trim().replace(/\/$/, "") || "";
@@ -7,7 +8,8 @@ function normalized(value: string | undefined | null) {
 export function getApiBase() {
   if (typeof window === "undefined") return "";
   const saved = normalized(window.localStorage.getItem(API_BASE_KEY));
-  return saved || normalized(window.__PICSECURE_API_BASE__);
+  const injected = normalized(window.__PICSECURE_API_BASE__);
+  return saved || injected || (isNativeRuntime() ? DEFAULT_NATIVE_API_BASE : "");
 }
 
 export function setApiBase(value: string) {

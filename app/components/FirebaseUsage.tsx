@@ -63,10 +63,12 @@ export default function FirebaseUsage(){
       if(project)params.set("project",project);
       if(manual)params.set("refresh","1");
       const controller=new AbortController(),timeout=window.setTimeout(()=>controller.abort(),CLIENT_TIMEOUT_MS);
-      const response=await fetch(apiUrl(`/api/firebase-usage${params.size?`?${params}`:""}`),{cache:"no-store",signal:controller.signal}).finally(()=>window.clearTimeout(timeout));
+      const response=await fetch(apiUrl(`/api/firebase-usage${params.size?`?${params}`:""}`),{cache:"no-store",signal:controller.signal,headers:{Accept:"application/json"}}).finally(()=>window.clearTimeout(timeout));
+      const contentType=response.headers.get("content-type")||"";
+      if(!contentType.includes("application/json"))throw new Error(`Usage API returned ${response.status} instead of JSON`);
       const next=await response.json() as UsageResponse;
       setData(next);if(next.status==="ready")window.localStorage.setItem(USAGE_CACHE_KEY,JSON.stringify(next));if(next.selectedProject)setSelected(next.selectedProject);else setSelected(current=>current||next.projects.find(p=>p.configured)?.projectId||"")
-    }catch{setData(current=>current||{status:"error",projects:[],message:"PicSecure Renew could not reach the usage service within 15 seconds."})}
+    }catch(error){setData(current=>current||{status:"error",projects:[],errorCode:"API_CONNECTION",message:error instanceof Error?`${error.message}. The app will keep the last successful usage snapshot and retry when you refresh.`:"PicSecure Renew could not reach the usage service within 15 seconds."})}
     finally{setLoading(false);setRefreshing(false)}
   },[]);
   useEffect(()=>{let hasCached=false;try{const cached=JSON.parse(window.localStorage.getItem(USAGE_CACHE_KEY)||"null") as UsageResponse|null;if(cached?.status==="ready"){hasCached=true;setData(cached);setSelected(cached.selectedProject||cached.projects.find(project=>project.configured)?.projectId||"");setLoading(false)}}catch{}const initial=window.setTimeout(()=>{setNow(Date.now());void load(undefined,false,hasCached)},0);const reconnect=()=>void load(undefined,true);window.addEventListener("picsecure:api-base-changed",reconnect);return()=>{clearTimeout(initial);window.removeEventListener("picsecure:api-base-changed",reconnect)}},[load]);
