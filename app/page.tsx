@@ -5,6 +5,7 @@
 import { ChangeEvent, FormEvent, ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import CloudSyncCard from "./components/CloudSyncCard";
 import FirebaseUsage from "./components/FirebaseUsage";
+import PwaInstaller from "./components/PwaInstaller";
 import ThoughtNotes, { ThoughtNote } from "./components/ThoughtNotes";
 import { CloudVault, useCloudVaultSync } from "./lib/cloud-sync";
 import { apiUrl, getApiBase, setApiBase as setRuntimeApiBase } from "./lib/runtime";
@@ -66,6 +67,13 @@ export default function Home(){
     const timer=window.setTimeout(()=>{
       const savedItems=parse<Renewal[]>(localStorage.getItem(KEYS.items),[]),savedLog=parse<Activity[]>(localStorage.getItem(KEYS.activity),[]),savedSettings=normalizeSettings(parse<unknown>(localStorage.getItem(KEYS.settings),DEFAULT_SETTINGS));
       setItems(savedItems);setLog(savedLog);setProfile(parse(localStorage.getItem(KEYS.profile),DEFAULT_PROFILE));setSettings(savedSettings);setNotes(parse<ThoughtNote[]>(localStorage.getItem(KEYS.notes),[]));setApiBaseDraft(getApiBase());setMounted(true);
+      const launchUrl=new URL(window.location.href);
+      if(launchUrl.searchParams.get("view")==="notes")setView("notes");
+      if(launchUrl.searchParams.get("action")==="add")openAdd();
+      if(launchUrl.searchParams.has("view")||launchUrl.searchParams.has("action")){
+        launchUrl.searchParams.delete("view");launchUrl.searchParams.delete("action");
+        window.history.replaceState({},"",`${launchUrl.pathname}${launchUrl.search}${launchUrl.hash}`);
+      }
       const lastSync=localStorage.getItem(KEYS.sync),syncDue=!lastSync||Date.now()-new Date(lastSync).getTime()>=86400000;
       if(savedSettings.registryRefresh&&syncDue&&savedItems.some(i=>i.type==="Domain")){
         void (async()=>{
@@ -156,7 +164,7 @@ export default function Home(){
         <div className="settings-section"><p>DEVICE SYNC</p><CloudSyncCard sync={cloudSync} onToast={setToast}/></div>
         <div className="settings-section connection-section"><p>DATA CONNECTION</p><div className="connection-card"><div className="connection-head"><span className={`connection-dot ${getApiBase()?"connected":""}`}/><div><strong>{getApiBase()?"Usage API connected":"Connect Firebase usage API"}</strong><small>Required for live usage data in the APK.</small></div></div><label><span>HTTPS API address</span><input type="url" inputMode="url" value={apiBaseDraft} onChange={e=>setApiBaseDraft(e.target.value)} placeholder="https://renew-api.yourdomain.com"/></label><button className="connection-save" onClick={saveApiConnection}><Icon name="sync" size={16}/>{getApiBase()?"Update connection":"Connect & refresh"}</button><small className="connection-note">Only the public HTTPS server address is stored here. Your Google private key must remain on the backend.</small></div></div>
         <div className="settings-section"><p>LOCAL BACKUP</p><button className="data-button" onClick={exportData}><Icon name="download" size={17}/><span><strong>Export backup</strong><small>Download all local vault data.</small></span><Icon name="chevron" size={15}/></button><button className="data-button" onClick={()=>importRef.current?.click()}><Icon name="upload" size={17}/><span><strong>Import backup</strong><small>Restore on this device.</small></span><Icon name="chevron" size={15}/></button></div>
-        <div className="settings-section"><p>APP DOWNLOADS</p><a className="data-button download-button" href="https://github.com/ananth8660-picSecure/PicSecure-Renewal/releases/latest" target="_blank" rel="noreferrer"><Icon name="download" size={17}/><span><strong>Windows & Android downloads</strong><small>Get the latest installer and APK from your private release page.</small></span><Icon name="external" size={15}/></a></div>
+        <div className="settings-section"><p>APP DOWNLOADS</p><PwaInstaller onToast={setToast}/><a className="data-button download-button" href="https://github.com/ananth8660-picSecure/PicSecure-Renewal/actions" target="_blank" rel="noreferrer"><Icon name="download" size={17}/><span><strong>Windows & Android downloads</strong><small>Download the latest installer and APK from your private build page.</small></span><Icon name="external" size={15}/></a></div>
         <div className="privacy-detail"><Icon name="lock"/><div><strong>Local-first privacy</strong><p>Your vault works offline first. Cloud sync is optional, account-scoped, and never stores card details or makes payments.</p></div></div>
       </div>
     </aside></div>}
