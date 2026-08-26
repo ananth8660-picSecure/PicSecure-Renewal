@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { isCurrentRelease, normalizeBuildId } from "../app/lib/update-build.js";
 import { createManifest, extractAndroidVersion } from "../scripts/create-update-manifest.mjs";
+import { nextPatchVersion, updateCargoVersion, updateGradleVersion } from "../scripts/bump-native-version.mjs";
 
 const BUILD_A = "a".repeat(40);
 const BUILD_B = "b".repeat(40);
@@ -24,4 +25,10 @@ test("release manifest contains immutable build and Android metadata", () => {
   assert.equal(normalizeBuildId(manifest.buildId), BUILD_A);
   assert.equal(manifest.platforms.android.assetName, "PicSecure-Renew.apk");
   assert.equal(manifest.platforms.android.versionCode, 12);
+});
+
+test("native releases increment the patch version and Android version code", () => {
+  assert.equal(nextPatchVersion("0.6.1"), "0.6.2");
+  assert.match(updateGradleVersion('versionCode 13\nversionName "0.6.1"', "0.6.2", 14), /versionCode 14\nversionName "0\.6\.2"/);
+  assert.match(updateCargoVersion('[package]\nname = "picsecure-renew"\nversion = "0.6.1"\n', "0.6.2"), /version = "0\.6\.2"/);
 });

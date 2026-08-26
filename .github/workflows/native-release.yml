@@ -14,10 +14,46 @@ permissions:
   contents: write
 
 jobs:
+  prepare-release:
+    runs-on: ubuntu-latest
+    outputs:
+      release_sha: ${{ steps.release.outputs.release_sha }}
+      version: ${{ steps.release.outputs.version }}
+      version_code: ${{ steps.release.outputs.version_code }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Increment every main-branch native release
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        id: bump
+        run: node scripts/bump-native-version.mjs
+      - name: Commit the release version
+        if: steps.bump.outcome == 'success'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add package.json package-lock.json android/app/build.gradle app/lib/app-version.ts src-tauri/Cargo.toml src-tauri/tauri.conf.json
+          git commit -m "chore(release): bump PicSecure Renew to v${{ steps.bump.outputs.version }}"
+          git push origin HEAD:main
+      - name: Resolve exact release identity
+        id: release
+        shell: bash
+        run: |
+          echo "release_sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          echo "version=$(node -p \"require('./package.json').version\")" >> "$GITHUB_OUTPUT"
+          echo "version_code=$(sed -nE 's/^[[:space:]]*versionCode[[:space:]]+([0-9]+).*/\1/p' android/app/build.gradle)" >> "$GITHUB_OUTPUT"
+
   windows-installer:
+    needs: prepare-release
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.prepare-release.outputs.release_sha }}
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -46,9 +82,12 @@ jobs:
           path: PicSecure-Renew-Windows.exe
 
   android-apk:
+    needs: prepare-release
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.prepare-release.outputs.release_sha }}
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -82,6 +121,15 @@ jobs:
           printf 'storeFile=../picsecure-release.jks\nstorePassword=%s\nkeyAlias=%s\nkeyPassword=%s\n' "$ANDROID_KEYSTORE_PASSWORD" "$ANDROID_KEY_ALIAS" "$ANDROID_KEY_PASSWORD" > android/keystore.properties
       - run: chmod +x gradlew && ./gradlew clean assembleRelease
         working-directory: android
+      - name: Verify APK embeds the release version
+        shell: bash
+        run: |
+          APK="android/app/build/outputs/apk/release/app-release.apk"
+          AAPT=$(find "$ANDROID_HOME/build-tools" -type f -name aapt -print | sort -V | tail -1)
+          test -n "$AAPT"
+          BADGING=$("$AAPT" dump badging "$APK" | head -1)
+          grep -F "versionName='${{ needs.prepare-release.outputs.version }}'" <<< "$BADGING"
+          grep -F "versionCode='${{ needs.prepare-release.outputs.version_code }}'" <<< "$BADGING"
       - run: cp android/app/build/outputs/apk/release/app-release.apk PicSecure-Renew.apk
       - uses: actions/upload-artifact@v4
         with:
@@ -90,15 +138,19 @@ jobs:
 
   github-release:
     if: github.event_name == 'push'
-    needs: [windows-installer, android-apk]
+    needs: [prepare-release, windows-installer, android-apk]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.prepare-release.outputs.release_sha }}
       - uses: actions/download-artifact@v4
         with:
           path: artifacts
       - name: Create immutable update manifest
         run: node scripts/create-update-manifest.mjs
+        env:
+          GITHUB_SHA: ${{ needs.prepare-release.outputs.release_sha }}
       - uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || 'latest-native' }}

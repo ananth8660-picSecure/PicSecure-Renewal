@@ -29,7 +29,13 @@ export function createManifest({ buildId, version, versionCode, generatedAt }) {
 async function main() {
   const packageJson = JSON.parse(await readFile("package.json", "utf8"));
   const android = extractAndroidVersion(await readFile("android/app/build.gradle", "utf8"));
-  if (packageJson.version !== android.versionName) throw new Error("Package and Android versions must match before publishing.");
+  const appVersion = (await readFile("app/lib/app-version.ts", "utf8")).match(/APP_VERSION=["']([^"']+)["']/)?.[1];
+  const cargoVersion = (await readFile("src-tauri/Cargo.toml", "utf8")).match(/\[package\][\s\S]*?\nversion\s*=\s*"([^"]+)"/)?.[1];
+  const tauriVersion = JSON.parse(await readFile("src-tauri/tauri.conf.json", "utf8")).version;
+  const versions = [packageJson.version, android.versionName, appVersion, cargoVersion, tauriVersion];
+  if (versions.some((version) => version !== packageJson.version)) {
+    throw new Error(`Native release versions do not match: ${versions.join(", ")}`);
+  }
   const buildId = process.env.GITHUB_SHA || execFileSync("git", ["rev-parse", "HEAD"], { encoding: "utf8" }).trim();
   const manifest = createManifest({
     buildId,
