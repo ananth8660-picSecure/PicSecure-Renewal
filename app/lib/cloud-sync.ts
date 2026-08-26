@@ -24,7 +24,7 @@ function isCloudVault(value:unknown):value is CloudVault{
   const vault=value as Partial<CloudVault>;
   return Array.isArray(vault.items)&&Array.isArray(vault.log)&&Boolean(vault.profile)&&typeof vault.profile==="object"&&Boolean(vault.settings)&&typeof vault.settings==="object"&&(!("notes" in vault)||Array.isArray(vault.notes));
 }
-function normalizeVault(vault:CloudVault,fallbackNotes:unknown[]=[]):CloudVault{return {...vault,notes:Array.isArray(vault.notes)?vault.notes:fallbackNotes}}
+function normalizeVault(vault:CloudVault,fallbackNotes:unknown[]=[]):CloudVault{return {...vault,notes:Array.isArray(vault.notes)?vault.notes:fallbackNotes}}\nfunction mergeNotes(remote:unknown[],local:unknown[]){\n  const merged=new Map<string,unknown>();\n  const stamp=(value:unknown)=>{if(!value||typeof value!=="object")return 0;const note=value as {updatedAt?:unknown;createdAt?:unknown};return new Date(String(note.updatedAt||note.createdAt||0)).getTime()||0};\n  for(const value of [...remote,...local]){\n    if(!value||typeof value!=="object"||!("id" in value))continue;\n    const id=String((value as {id:unknown}).id),existing=merged.get(id);\n    if(!existing||stamp(value)>=stamp(existing))merged.set(id,value);\n  }\n  return [...merged.values()];\n}
 function deviceId(){
   const saved=localStorage.getItem(DEVICE_KEY);if(saved)return saved;
   const id=crypto.randomUUID();localStorage.setItem(DEVICE_KEY,id);return id;
@@ -78,16 +78,16 @@ export function useCloudVaultSync(vault:CloudVault,ready:boolean,applyRemote:(va
           if(!isCloudVault(remote))return;
           const remoteHasNotes=Array.isArray((remote as Partial<CloudVault>).notes);
           const localNotes=vaultRef.current.notes;
-          const normalized=normalizeVault(remote,localNotes),remoteHash=hashVault(normalized),localHash=hashVault(vaultRef.current);
+          const normalized=normalizeVault(remote,localNotes);\n          normalized.notes=remoteHasNotes?mergeNotes(normalized.notes,localNotes):localNotes;\n          const remoteHash=hashVault(normalized),storedRemoteHash=hashVault(normalizeVault(remote,[])),localHash=hashVault(vaultRef.current);
           lastCloudHashRef.current=remoteHash;cloudReadyRef.current=true;
           if(remoteHash!==localHash){pendingRemoteHashRef.current=remoteHash;applyRemoteRef.current(normalized)}
           // Vaults created before Thoughts existed have no `vault.notes` field.
           // Migrate only that field so an older cloud snapshot can never erase
           // notes which already live in this browser. The following snapshot
           // then distributes them to Android and Windows in real time.
-          if(!remoteHasNotes&&localNotes.length){
+          if((!remoteHasNotes&&localNotes.length)||storedRemoteHash!==remoteHash){
             setStatus("syncing");
-            void updateDoc(vaultDoc,{"vault.notes":localNotes,schemaVersion:5,updatedAt:serverTimestamp(),updatedBy:deviceId()})
+            void updateDoc(vaultDoc,{"vault.notes":normalized.notes,schemaVersion:5,updatedAt:serverTimestamp(),updatedBy:deviceId()})
               .catch(nextError=>{setError(friendlyError(nextError));setStatus(navigator.onLine?"error":"offline")});
           }
           setLastSyncedAt(new Date().toISOString());setStatus(snapshot.metadata.fromCache?"offline":"synced");setError("");
