@@ -1,8 +1,10 @@
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
 import test from "node:test";
 import { isCurrentRelease, normalizeBuildId } from "../app/lib/update-build.js";
 import { createManifest, extractAndroidVersion } from "../scripts/create-update-manifest.mjs";
 import { nextPatchVersion, updateCargoVersion, updateGradleVersion } from "../scripts/bump-native-version.mjs";
+import { cloudSnapshotAction } from "../app/lib/cloud-restore.js";
 
 const BUILD_A = "a".repeat(40);
 const BUILD_B = "b".repeat(40);
@@ -31,4 +33,22 @@ test("native releases increment the patch version and Android version code", () 
   assert.equal(nextPatchVersion("0.6.1"), "0.6.2");
   assert.match(updateGradleVersion('versionCode 13\nversionName "0.6.1"', "0.6.2", 14), /versionCode 14\nversionName "0\.6\.2"/);
   assert.match(updateCargoVersion('[package]\nname = "picsecure-renew"\nversion = "0.6.1"\n', "0.6.2"), /version = "0\.6\.2"/);
+});
+
+test("a fresh install waits for Firestore server data before creating an empty vault", () => {
+  assert.equal(cloudSnapshotAction({ exists: false, fromCache: true }), "wait_for_server");
+  assert.equal(cloudSnapshotAction({ exists: true, fromCache: false }), "load");
+  assert.equal(cloudSnapshotAction({ exists: false, fromCache: false }), "create");
+});
+
+test("cloud writer schema stays aligned with Firestore security rules", async () => {
+  const [client, rules] = await Promise.all([
+    readFile("app/lib/cloud-sync.ts", "utf8"),
+    readFile("firestore.rules", "utf8"),
+  ]);
+  const clientSchemas = [...client.matchAll(/schemaVersion:(\d+)/g)].map((match) => Number(match[1]));
+  const rulesSchema = Number(rules.match(/data\.schemaVersion\s*==\s*(\d+)/)?.[1]);
+  assert.ok(clientSchemas.length > 0);
+  assert.ok(Number.isInteger(rulesSchema));
+  assert.deepEqual([...new Set(clientSchemas)], [rulesSchema]);
 });

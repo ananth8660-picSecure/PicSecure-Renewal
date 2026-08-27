@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { createUserWithEmailAndPassword, onAuthStateChanged, sendPasswordResetEmail, signInWithEmailAndPassword, signOut, User } from "firebase/auth";
 import { doc, onSnapshot, serverTimestamp, setDoc, updateDoc } from "firebase/firestore";
 import { getFirebaseServices, isFirebaseSyncConfigured } from "./firebase-client";
+import { cloudSnapshotAction } from "./cloud-restore.js";
 
 export type CloudVault = { items:unknown[]; log:unknown[]; profile:unknown; settings:unknown; notes:unknown[] };
 export type CloudSyncStatus = "not_configured"|"connecting"|"signed_out"|"syncing"|"synced"|"offline"|"error";
@@ -63,7 +64,7 @@ export function useCloudVaultSync(vault:CloudVault,ready:boolean,applyRemote:(va
     setStatus("syncing");setError("");
     try{
       const {db}=await getFirebaseServices();
-      await setDoc(doc(db,"users",active.uid,"vault","main"),{schemaVersion:5,vault:current,updatedAt:serverTimestamp(),updatedBy:deviceId()},{merge:true});
+      await setDoc(doc(db,"users",active.uid,"vault","main"),{schemaVersion:4,vault:current,updatedAt:serverTimestamp(),updatedBy:deviceId()},{merge:true});
       lastCloudHashRef.current=currentHash;setLastSyncedAt(new Date().toISOString());setStatus(navigator.onLine?"synced":"offline");
     }catch(nextError){setError(friendlyError(nextError));setStatus(navigator.onLine?"error":"offline");throw nextError}
   },[]);
@@ -79,12 +80,20 @@ export function useCloudVaultSync(vault:CloudVault,ready:boolean,applyRemote:(va
         setStatus("connecting");
         const vaultDoc=doc(db,"users",nextUser.uid,"vault","main");
         unsubscribeDocRef.current=onSnapshot(vaultDoc,{includeMetadataChanges:true},snapshot=>{
-          if(!snapshot.exists()){
-            cloudReadyRef.current=true;setStatus(snapshot.metadata.fromCache?"offline":"syncing");
-            if(!snapshot.metadata.fromCache)void push(true).catch(()=>undefined);
+          const snapshotAction=cloudSnapshotAction({exists:snapshot.exists(),fromCache:snapshot.metadata.fromCache});
+          if(snapshotAction==="wait_for_server"){
+            cloudReadyRef.current=false;
+            setStatus(navigator.onLine?"connecting":"offline");
             return;
           }
-          const snapshotData=snapshot.data(),remote=snapshotData.vault;
+          if(snapshotAction==="create"){
+            cloudReadyRef.current=true;setStatus("syncing");
+            void push(true).catch(()=>undefined);
+            return;
+          }
+          const snapshotData=snapshot.data();
+          if(!snapshotData){setError("Cloud vault data is unavailable.");setStatus("error");return}
+          const remote=snapshotData.vault;
           if(!isCloudVault(remote))return;
           const remoteHasNotes=Array.isArray((remote as Partial<CloudVault>).notes);
           const localNotes=vaultRef.current.notes;
@@ -99,7 +108,7 @@ export function useCloudVaultSync(vault:CloudVault,ready:boolean,applyRemote:(va
           // then distributes them to Android and Windows in real time.
           if((!remoteHasNotes&&localNotes.length)||storedRemoteHash!==remoteHash){
             setStatus("syncing");
-            void updateDoc(vaultDoc,{"vault.notes":normalized.notes,schemaVersion:5,updatedAt:serverTimestamp(),updatedBy:deviceId()})
+            void updateDoc(vaultDoc,{"vault.notes":normalized.notes,schemaVersion:4,updatedAt:serverTimestamp(),updatedBy:deviceId()})
               .catch(nextError=>{setError(friendlyError(nextError));setStatus(navigator.onLine?"error":"offline")});
           }
           setLastSyncedAt(new Date().toISOString());setStatus(snapshot.metadata.fromCache?"offline":"synced");setError("");
