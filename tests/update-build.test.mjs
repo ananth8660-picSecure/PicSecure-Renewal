@@ -4,7 +4,7 @@ import test from "node:test";
 import { isCurrentRelease, normalizeBuildId } from "../app/lib/update-build.js";
 import { createManifest, extractAndroidVersion } from "../scripts/create-update-manifest.mjs";
 import { nextPatchVersion, updateCargoVersion, updateGradleVersion } from "../scripts/bump-native-version.mjs";
-import { cloudSnapshotAction } from "../app/lib/cloud-restore.js";
+import { cloudSnapshotAction, stableVaultFingerprint } from "../app/lib/cloud-restore.js";
 
 const BUILD_A = "a".repeat(40);
 const BUILD_B = "b".repeat(40);
@@ -41,6 +41,26 @@ test("a fresh install waits for Firestore server data before creating an empty v
   assert.equal(cloudSnapshotAction({ exists: false, fromCache: false }), "create");
 });
 
+test("Firestore field ordering cannot trigger a repeated cloud write", () => {
+  const local = {
+    items: [{ id: "renewal-1", provider: "Zoho", active: true }],
+    log: [],
+    profile: { name: "Ananth", preferences: { accent: "cyan", compact: false } },
+    settings: { smartReminders: true, registryRefresh: true },
+    notes: [{ id: "thought-1", title: "Secure Moments" }],
+  };
+  const firestore = {
+    settings: { registryRefresh: true, smartReminders: true },
+    profile: { preferences: { compact: false, accent: "cyan" }, name: "Ananth" },
+    notes: [{ title: "Secure Moments", id: "thought-1" }],
+    log: [],
+    items: [{ active: true, provider: "Zoho", id: "renewal-1" }],
+  };
+
+  assert.equal(stableVaultFingerprint(local), stableVaultFingerprint(firestore));
+  assert.notEqual(stableVaultFingerprint(local), stableVaultFingerprint({ ...firestore, notes: [] }));
+});
+
 test("cloud writer schema stays aligned with Firestore security rules", async () => {
   const [client, rules] = await Promise.all([
     readFile("app/lib/cloud-sync.ts", "utf8"),
@@ -61,6 +81,7 @@ test("thoughts use acknowledged Firestore writes instead of app localStorage", a
   ]);
   assert.doesNotMatch(page, /localStorage\.setItem\(KEYS\.notes/);
   assert.match(page, /await saveCloudNotes\(next\)/);
+  assert.match(page, /cloudSync\.ready&&cloudSync\.status!=="offline"/);
   assert.match(cloudSync, /await setDoc\(doc\(db,"users",active\.uid,"vault","main"\)/);
   assert.match(thoughts, /await onChange\(/);
   assert.match(thoughts, /Thought saved securely to Firestore/);
@@ -74,4 +95,12 @@ test("destructive actions use branded confirmation dialogs", async () => {
   assert.doesNotMatch(`${page}\n${thoughts}`, /window\.confirm/);
   assert.match(page, /<ConfirmDialog open=\{Boolean\(confirmRenewal\)\}/);
   assert.match(thoughts, /<ConfirmDialog open=\{Boolean\(pendingDelete\)\}/);
+});
+
+test("native dialogs hide mobile navigation and keep primary actions touch friendly", async () => {
+  const css = await readFile("app/globals.css", "utf8");
+  assert.match(css, /app-shell:has\([^}]+\)>\.mobile-nav\{[^}]*visibility:hidden/);
+  assert.match(css, /\.thought-editor\{[^}]*height:100dvh;[^}]*overflow:hidden/);
+  assert.match(css, /\.thought-save\{min-height:54px;height:54px/);
+  assert.match(css, /\.form-submit\{height:54px;min-height:54px/);
 });

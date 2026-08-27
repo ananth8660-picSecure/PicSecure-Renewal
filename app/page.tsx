@@ -75,7 +75,7 @@ export default function Home(){
   const saveCloudNotes=cloudSync.saveNotes;
   const updateNotes=useCallback(async(next:ThoughtNote[])=>{await saveCloudNotes(next);setNotes(next);localStorage.removeItem(KEYS.notes)},[saveCloudNotes]);
   const visibleNotes=cloudSync.user?notes:[];
-  const thoughtCloudReady=Boolean(cloudSync.user&&cloudSync.status==="synced");
+  const thoughtCloudReady=Boolean(cloudSync.user&&cloudSync.ready&&cloudSync.status!=="offline"&&cloudSync.status!=="error");
 
   useEffect(()=>{
     const timer=window.setTimeout(()=>{

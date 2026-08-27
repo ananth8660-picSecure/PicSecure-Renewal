@@ -4,12 +4,12 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { createUserWithEmailAndPassword, onAuthStateChanged, sendPasswordResetEmail, signInWithEmailAndPassword, signOut, User } from "firebase/auth";
 import { doc, onSnapshot, serverTimestamp, setDoc, updateDoc } from "firebase/firestore";
 import { getFirebaseServices, isFirebaseSyncConfigured } from "./firebase-client";
-import { cloudSnapshotAction } from "./cloud-restore.js";
+import { cloudSnapshotAction, stableVaultFingerprint } from "./cloud-restore.js";
 
 export type CloudVault = { items:unknown[]; log:unknown[]; profile:unknown; settings:unknown; notes:unknown[] };
 export type CloudSyncStatus = "not_configured"|"connecting"|"signed_out"|"syncing"|"synced"|"offline"|"error";
 export type CloudSyncController = {
-  configured:boolean; user:User|null; status:CloudSyncStatus; error:string; lastSyncedAt:string;
+  configured:boolean; user:User|null; ready:boolean; status:CloudSyncStatus; error:string; lastSyncedAt:string;
   signIn:(email:string,password:string)=>Promise<void>;
   createAccount:(email:string,password:string)=>Promise<void>;
   resetPassword:(email:string)=>Promise<void>;
@@ -20,7 +20,7 @@ export type CloudSyncController = {
 
 const DEVICE_KEY="picsecure.cloud.device.v1";
 
-function hashVault(vault:CloudVault){return JSON.stringify(vault)}
+function hashVault(vault:CloudVault){return stableVaultFingerprint(vault)??""}
 function isCloudVault(value:unknown):value is CloudVault{
   if(!value||typeof value!=="object")return false;
   const vault=value as Partial<CloudVault>;
@@ -54,7 +54,7 @@ function friendlyError(error:unknown){
 
 export function useCloudVaultSync(vault:CloudVault,ready:boolean,applyRemote:(vault:CloudVault)=>void):CloudSyncController{
   const configured=isFirebaseSyncConfigured();
-  const [user,setUser]=useState<User|null>(null),[status,setStatus]=useState<CloudSyncStatus>(configured?"connecting":"not_configured"),[error,setError]=useState(""),[lastSyncedAt,setLastSyncedAt]=useState("");
+  const [user,setUser]=useState<User|null>(null),[cloudReady,setCloudReady]=useState(false),[status,setStatus]=useState<CloudSyncStatus>(configured?"connecting":"not_configured"),[error,setError]=useState(""),[lastSyncedAt,setLastSyncedAt]=useState("");
   const vaultRef=useRef(vault),applyRemoteRef=useRef(applyRemote),userRef=useRef<User|null>(null),cloudReadyRef=useRef(false),lastCloudHashRef=useRef(""),pendingRemoteHashRef=useRef(""),timerRef=useRef<number|null>(null),unsubscribeDocRef=useRef<null|(()=>void)>(null);
   useEffect(()=>{vaultRef.current=vault;applyRemoteRef.current=applyRemote},[applyRemote,vault]);
 
@@ -81,24 +81,24 @@ export function useCloudVaultSync(vault:CloudVault,ready:boolean,applyRemote:(va
     void getFirebaseServices().then(({auth,db})=>{
       if(cancelled)return;
       unsubscribeAuth=onAuthStateChanged(auth,nextUser=>{
-        unsubscribeDocRef.current?.();unsubscribeDocRef.current=null;userRef.current=nextUser;setUser(nextUser);cloudReadyRef.current=false;lastCloudHashRef.current="";pendingRemoteHashRef.current="";setError("");
+        unsubscribeDocRef.current?.();unsubscribeDocRef.current=null;userRef.current=nextUser;setUser(nextUser);cloudReadyRef.current=false;setCloudReady(false);lastCloudHashRef.current="";pendingRemoteHashRef.current="";setError("");
         if(!nextUser){setStatus("signed_out");return}
         setStatus("connecting");
         const vaultDoc=doc(db,"users",nextUser.uid,"vault","main");
         unsubscribeDocRef.current=onSnapshot(vaultDoc,{includeMetadataChanges:true},snapshot=>{
           const snapshotAction=cloudSnapshotAction({exists:snapshot.exists(),fromCache:snapshot.metadata.fromCache});
           if(snapshotAction==="wait_for_server"){
-            cloudReadyRef.current=false;
+            cloudReadyRef.current=false;setCloudReady(false);
             setStatus(navigator.onLine?"connecting":"offline");
             return;
           }
           if(snapshotAction==="create"){
-            cloudReadyRef.current=true;setStatus("syncing");
+            cloudReadyRef.current=true;setCloudReady(true);setStatus("syncing");
             void push(true).catch(()=>undefined);
             return;
           }
           const snapshotData=snapshot.data();
-          if(!snapshotData){setError("Cloud vault data is unavailable.");setStatus("error");return}
+          if(!snapshotData){cloudReadyRef.current=false;setCloudReady(false);setError("Cloud vault data is unavailable.");setStatus("error");return}
           const remote=snapshotData.vault;
           if(!isCloudVault(remote))return;
           const remoteHasNotes=Array.isArray((remote as Partial<CloudVault>).notes);
@@ -106,7 +106,7 @@ export function useCloudVaultSync(vault:CloudVault,ready:boolean,applyRemote:(va
           const normalized=normalizeVault(remote,localNotes);
           normalized.notes=remoteHasNotes?mergeNotes(normalized.notes,localNotes):localNotes;
           const remoteHash=hashVault(normalized),storedRemoteHash=hashVault(normalizeVault(remote,[])),localHash=hashVault(vaultRef.current);
-          lastCloudHashRef.current=remoteHash;cloudReadyRef.current=true;
+          lastCloudHashRef.current=remoteHash;cloudReadyRef.current=true;setCloudReady(true);
           if(remoteHash!==localHash){pendingRemoteHashRef.current=remoteHash;applyRemoteRef.current(normalized)}
           // Vaults created before Thoughts existed have no `vault.notes` field.
           // Migrate only that field so an older cloud snapshot can never erase
@@ -120,7 +120,7 @@ export function useCloudVaultSync(vault:CloudVault,ready:boolean,applyRemote:(va
             return;
           }
           setLastSyncedAt(new Date().toISOString());setStatus(snapshot.metadata.fromCache?"offline":"synced");setError("");
-        },nextError=>{setError(friendlyError(nextError));setStatus(navigator.onLine?"error":"offline")});
+        },nextError=>{cloudReadyRef.current=false;setCloudReady(false);setError(friendlyError(nextError));setStatus(navigator.onLine?"error":"offline")});
       });
       if(cancelled)unsubscribeAuth();
     }).catch(nextError=>{if(!cancelled){setError(friendlyError(nextError));setStatus("error")}});
@@ -154,7 +154,7 @@ export function useCloudVaultSync(vault:CloudVault,ready:boolean,applyRemote:(va
     catch(nextError){const message=friendlyError(nextError);setError(message);setStatus("signed_out");throw new Error(message)}
   };
   const resetPassword=async(email:string)=>{try{const {auth}=await getFirebaseServices();await sendPasswordResetEmail(auth,email.trim())}catch(nextError){throw new Error(friendlyError(nextError))}};
-  const signOutAccount=async()=>{const {auth}=await getFirebaseServices();await signOut(auth);setStatus("signed_out")};
+  const signOutAccount=async()=>{const {auth}=await getFirebaseServices();await signOut(auth);cloudReadyRef.current=false;setCloudReady(false);setStatus("signed_out")};
 
-  return {configured,user,status,error,lastSyncedAt,signIn:(email,password)=>authenticate("signin",email,password),createAccount:(email,password)=>authenticate("create",email,password),resetPassword,signOutAccount,syncNow:()=>push(true),saveNotes};
+  return {configured,user,ready:cloudReady,status,error,lastSyncedAt,signIn:(email,password)=>authenticate("signin",email,password),createAccount:(email,password)=>authenticate("create",email,password),resetPassword,signOutAccount,syncNow:()=>push(true),saveNotes};
 }
