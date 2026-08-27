@@ -15,6 +15,7 @@ export type CloudSyncController = {
   resetPassword:(email:string)=>Promise<void>;
   signOutAccount:()=>Promise<void>;
   syncNow:()=>Promise<void>;
+  saveNotes:(notes:unknown[])=>Promise<void>;
 };
 
 const DEVICE_KEY="picsecure.cloud.device.v1";
@@ -57,17 +58,22 @@ export function useCloudVaultSync(vault:CloudVault,ready:boolean,applyRemote:(va
   const vaultRef=useRef(vault),applyRemoteRef=useRef(applyRemote),userRef=useRef<User|null>(null),cloudReadyRef=useRef(false),lastCloudHashRef=useRef(""),pendingRemoteHashRef=useRef(""),timerRef=useRef<number|null>(null),unsubscribeDocRef=useRef<null|(()=>void)>(null);
   useEffect(()=>{vaultRef.current=vault;applyRemoteRef.current=applyRemote},[applyRemote,vault]);
 
-  const push=useCallback(async(force=false)=>{
-    const active=userRef.current;if(!active||!cloudReadyRef.current)return;
-    const current=vaultRef.current,currentHash=hashVault(current);
+  const commitVault=useCallback(async(current:CloudVault,force=false,required=false)=>{
+    const active=userRef.current;
+    if(!active){if(required)throw new Error("Sign in to Private Cloud Vault before saving thoughts.");return}
+    if(!cloudReadyRef.current){if(required)throw new Error("Cloud Vault is still connecting. Please try again in a moment.");return}
+    if(required&&!navigator.onLine)throw new Error("Internet connection is required to save thoughts securely to Firestore.");
+    const currentHash=hashVault(current);
     if(!force&&currentHash===lastCloudHashRef.current)return;
     setStatus("syncing");setError("");
     try{
       const {db}=await getFirebaseServices();
       await setDoc(doc(db,"users",active.uid,"vault","main"),{schemaVersion:4,vault:current,updatedAt:serverTimestamp(),updatedBy:deviceId()},{merge:true});
-      lastCloudHashRef.current=currentHash;setLastSyncedAt(new Date().toISOString());setStatus(navigator.onLine?"synced":"offline");
-    }catch(nextError){setError(friendlyError(nextError));setStatus(navigator.onLine?"error":"offline");throw nextError}
+      vaultRef.current=current;lastCloudHashRef.current=currentHash;setLastSyncedAt(new Date().toISOString());setStatus(navigator.onLine?"synced":"offline");
+    }catch(nextError){const message=friendlyError(nextError);setError(message);setStatus(navigator.onLine?"error":"offline");if(required)throw new Error(message);throw nextError}
   },[]);
+  const push=useCallback(async(force=false)=>commitVault(vaultRef.current,force),[commitVault]);
+  const saveNotes=useCallback(async(notes:unknown[])=>commitVault({...vaultRef.current,notes},true,true),[commitVault]);
 
   useEffect(()=>{
     if(!configured||!ready)return;
@@ -109,7 +115,9 @@ export function useCloudVaultSync(vault:CloudVault,ready:boolean,applyRemote:(va
           if((!remoteHasNotes&&localNotes.length)||storedRemoteHash!==remoteHash){
             setStatus("syncing");
             void updateDoc(vaultDoc,{"vault.notes":normalized.notes,schemaVersion:4,updatedAt:serverTimestamp(),updatedBy:deviceId()})
+              .then(()=>{setLastSyncedAt(new Date().toISOString());setStatus(navigator.onLine?"synced":"offline");setError("")})
               .catch(nextError=>{setError(friendlyError(nextError));setStatus(navigator.onLine?"error":"offline")});
+            return;
           }
           setLastSyncedAt(new Date().toISOString());setStatus(snapshot.metadata.fromCache?"offline":"synced");setError("");
         },nextError=>{setError(friendlyError(nextError));setStatus(navigator.onLine?"error":"offline")});
@@ -148,5 +156,5 @@ export function useCloudVaultSync(vault:CloudVault,ready:boolean,applyRemote:(va
   const resetPassword=async(email:string)=>{try{const {auth}=await getFirebaseServices();await sendPasswordResetEmail(auth,email.trim())}catch(nextError){throw new Error(friendlyError(nextError))}};
   const signOutAccount=async()=>{const {auth}=await getFirebaseServices();await signOut(auth);setStatus("signed_out")};
 
-  return {configured,user,status,error,lastSyncedAt,signIn:(email,password)=>authenticate("signin",email,password),createAccount:(email,password)=>authenticate("create",email,password),resetPassword,signOutAccount,syncNow:()=>push(true)};
+  return {configured,user,status,error,lastSyncedAt,signIn:(email,password)=>authenticate("signin",email,password),createAccount:(email,password)=>authenticate("create",email,password),resetPassword,signOutAccount,syncNow:()=>push(true),saveNotes};
 }

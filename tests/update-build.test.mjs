@@ -52,3 +52,26 @@ test("cloud writer schema stays aligned with Firestore security rules", async ()
   assert.ok(Number.isInteger(rulesSchema));
   assert.deepEqual([...new Set(clientSchemas)], [rulesSchema]);
 });
+
+test("thoughts use acknowledged Firestore writes instead of app localStorage", async () => {
+  const [page, cloudSync, thoughts] = await Promise.all([
+    readFile("app/page.tsx", "utf8"),
+    readFile("app/lib/cloud-sync.ts", "utf8"),
+    readFile("app/components/ThoughtNotes.tsx", "utf8"),
+  ]);
+  assert.doesNotMatch(page, /localStorage\.setItem\(KEYS\.notes/);
+  assert.match(page, /await saveCloudNotes\(next\)/);
+  assert.match(cloudSync, /await setDoc\(doc\(db,"users",active\.uid,"vault","main"\)/);
+  assert.match(thoughts, /await onChange\(/);
+  assert.match(thoughts, /Thought saved securely to Firestore/);
+});
+
+test("destructive actions use branded confirmation dialogs", async () => {
+  const [page, thoughts] = await Promise.all([
+    readFile("app/page.tsx", "utf8"),
+    readFile("app/components/ThoughtNotes.tsx", "utf8"),
+  ]);
+  assert.doesNotMatch(`${page}\n${thoughts}`, /window\.confirm/);
+  assert.match(page, /<ConfirmDialog open=\{Boolean\(confirmRenewal\)\}/);
+  assert.match(thoughts, /<ConfirmDialog open=\{Boolean\(pendingDelete\)\}/);
+});

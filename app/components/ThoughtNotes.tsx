@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
+import ConfirmDialog from "./ConfirmDialog";
 
 export type ThoughtNote = {
   id:string;
@@ -14,8 +15,10 @@ export type ThoughtNote = {
 
 type Props={
   notes:ThoughtNote[];
-  onChange:(notes:ThoughtNote[])=>void;
-  onToast:(message:string)=>void;
+  cloudReady:boolean;
+  onChange:(notes:ThoughtNote[])=>Promise<void>;
+  onRequireCloud:()=>void;
+  onToast:(message:string,tone?:"success"|"error"|"info"|"warning")=>void;
   onActivity?:(title:string,detail:string)=>void;
 };
 
@@ -48,8 +51,8 @@ function dateLabel(value:string){
   return new Date(value).toLocaleString("en-IN",{day:"2-digit",month:"short",year:"numeric",hour:"numeric",minute:"2-digit"});
 }
 
-export default function ThoughtNotes({notes,onChange,onToast,onActivity}:Props){
-  const [editorOpen,setEditorOpen]=useState(false),[editing,setEditing]=useState<ThoughtNote|null>(null),[query,setQuery]=useState(""),[expanded,setExpanded]=useState<Set<string>>(new Set()),[draftColor,setDraftColor]=useState(PALETTE[0]);
+export default function ThoughtNotes({notes,cloudReady,onChange,onRequireCloud,onToast,onActivity}:Props){
+  const [editorOpen,setEditorOpen]=useState(false),[editing,setEditing]=useState<ThoughtNote|null>(null),[query,setQuery]=useState(""),[expanded,setExpanded]=useState<Set<string>>(new Set()),[draftColor,setDraftColor]=useState(PALETTE[0]),[busy,setBusy]=useState(false),[pendingDelete,setPendingDelete]=useState<ThoughtNote|null>(null);
   const sorted=useMemo(()=>notes.filter(note=>`${note.title} ${note.body}`.toLowerCase().includes(query.trim().toLowerCase())).sort((a,b)=>Number(b.pinned)-Number(a.pinned)||new Date(b.updatedAt).getTime()-new Date(a.updatedAt).getTime()),[notes,query]);
   useEffect(()=>{
     const closeTopOverlay=(event:Event)=>{if(!editorOpen)return;setEditorOpen(false);setEditing(null);event.preventDefault()};
@@ -57,25 +60,31 @@ export default function ThoughtNotes({notes,onChange,onToast,onActivity}:Props){
     return()=>window.removeEventListener("picsecure:close-top-overlay",closeTopOverlay)
   },[editorOpen]);
 
-  function openNew(){setEditing(null);setDraftColor(PALETTE[notes.length%PALETTE.length]);setEditorOpen(true)}
-  function openEdit(note:ThoughtNote){setEditing(note);setDraftColor(note.color);setEditorOpen(true)}
-  function save(e:FormEvent<HTMLFormElement>){
+  function requireCloud(){onToast("Sign in to Private Cloud Vault before saving thoughts.","warning");onRequireCloud()}
+  function openNew(){if(!cloudReady){requireCloud();return}setEditing(null);setDraftColor(PALETTE[notes.length%PALETTE.length]);setEditorOpen(true)}
+  function openEdit(note:ThoughtNote){if(!cloudReady){requireCloud();return}setEditing(note);setDraftColor(note.color);setEditorOpen(true)}
+  async function save(e:FormEvent<HTMLFormElement>){
     e.preventDefault();const data=new FormData(e.currentTarget),title=String(data.get("title")||"").trim(),body=String(data.get("body")||"").trim();if(!title||!body)return;
     const now=new Date().toISOString();
-    if(editing){const next={...editing,title,body,color:draftColor,updatedAt:now};onChange(notes.map(note=>note.id===editing.id?next:note));onActivity?.("Thought updated",title);onToast("Thought updated")}
-    else{const next:ThoughtNote={id:crypto.randomUUID(),title,body,color:draftColor,pinned:false,createdAt:now,updatedAt:now};onChange([next,...notes]);setExpanded(current=>new Set(current).add(next.id));onActivity?.("New thought saved",title);onToast("Thought saved to your private vault")}
-    setEditorOpen(false);setEditing(null)
+    if(!cloudReady){requireCloud();return}
+    setBusy(true);
+    try{
+      if(editing){const next={...editing,title,body,color:draftColor,updatedAt:now};await onChange(notes.map(note=>note.id===editing.id?next:note));onActivity?.("Thought updated",title);onToast("Thought updated securely in Firestore.")}
+      else{const next:ThoughtNote={id:crypto.randomUUID(),title,body,color:draftColor,pinned:false,createdAt:now,updatedAt:now};await onChange([next,...notes]);setExpanded(current=>new Set(current).add(next.id));onActivity?.("New thought saved",title);onToast("Thought saved securely to Firestore.")}
+      setEditorOpen(false);setEditing(null)
+    }catch(error){onToast(error instanceof Error?error.message:"Thought could not be saved to Firestore.","error")}
+    finally{setBusy(false)}
   }
-  function remove(note:ThoughtNote){if(!window.confirm(`Delete “${note.title}”?`))return;onChange(notes.filter(item=>item.id!==note.id));onActivity?.("Thought deleted",note.title);onToast("Thought deleted")}
-  function togglePin(note:ThoughtNote){onChange(notes.map(item=>item.id===note.id?{...item,pinned:!item.pinned,updatedAt:new Date().toISOString()}:item));onToast(note.pinned?"Removed from pinned":"Pinned to the top")}
+  async function remove(){const note=pendingDelete;if(!note)return;setBusy(true);try{await onChange(notes.filter(item=>item.id!==note.id));onActivity?.("Thought deleted",note.title);onToast("Thought deleted securely from Firestore.");setPendingDelete(null)}catch(error){onToast(error instanceof Error?error.message:"Thought could not be deleted from Firestore.","error")}finally{setBusy(false)}}
+  async function togglePin(note:ThoughtNote){if(!cloudReady){requireCloud();return}setBusy(true);try{await onChange(notes.map(item=>item.id===note.id?{...item,pinned:!item.pinned,updatedAt:new Date().toISOString()}:item));onToast(note.pinned?"Thought removed from pinned.":"Thought pinned to the top.")}catch(error){onToast(error instanceof Error?error.message:"Thought could not be updated in Firestore.","error")}finally{setBusy(false)}}
   function toggleExpand(id:string){setExpanded(current=>{const next=new Set(current);if(next.has(id))next.delete(id);else next.add(id);return next})}
-  async function copyAll(note:ThoughtNote){try{await navigator.clipboard.writeText(`${note.title}\n\n${note.body}`);onToast("Title and complete note copied")}catch{onToast("Copy permission is unavailable on this device")}}
+  async function copyAll(note:ThoughtNote){try{await navigator.clipboard.writeText(`${note.title}\n\n${note.body}`);onToast("Title and complete thought copied.")}catch{onToast("Clipboard permission is unavailable on this device.","error")}}
 
   return <section className="thoughts-view">
     <div className="thoughts-hero">
       <div className="thoughts-hero-icon"><NoteIcon name="sparkle" size={26}/></div>
-      <div><p>PRIVATE IDEA STUDIO</p><h2>Capture now. Shape it later.</h2><span>Your thoughts stay readable, searchable and synced across your signed-in devices.</span></div>
-      <button onClick={openNew}><NoteIcon name="plus" size={18}/>New thought</button>
+      <div><p>PRIVATE IDEA STUDIO</p><h2>Capture now. Shape it later.</h2><span>{cloudReady?"Every change is confirmed by Firestore before it is shown as saved.":"Sign in to Private Cloud Vault to load and save your thoughts."}</span></div>
+      <button onClick={openNew}><NoteIcon name="plus" size={18}/>{cloudReady?"New thought":"Sign in to save"}</button>
     </div>
     <div className="thoughts-toolbar">
       <div><NoteIcon name="search" size={18}/><input value={query} onChange={e=>setQuery(e.target.value)} placeholder="Search titles or details…"/></div>
@@ -90,7 +99,7 @@ export default function ThoughtNotes({notes,onChange,onToast,onActivity}:Props){
           <span className="thought-chevron"><NoteIcon name="chevron" size={19}/></span>
         </button>
         <div className="thought-expand"><div className="thought-expand-inner">
-          <div className="thought-detail-head"><div><span>SMART DETAIL VIEW</span><small>{note.updatedAt!==note.createdAt?`Edited ${dateLabel(note.updatedAt)}`:`Created ${dateLabel(note.createdAt)}`}</small></div><div className="thought-actions"><button onClick={()=>void copyAll(note)} title="Copy title and complete note"><NoteIcon name="copy" size={16}/><span>Copy all</span></button><button onClick={()=>togglePin(note)} title={note.pinned?"Unpin":"Pin"}><NoteIcon name="pin" size={16}/></button><button onClick={()=>openEdit(note)} title="Edit"><NoteIcon name="edit" size={16}/></button><button className="thought-delete" onClick={()=>remove(note)} title="Delete"><NoteIcon name="trash" size={16}/></button></div></div>
+          <div className="thought-detail-head"><div><span>SMART DETAIL VIEW</span><small>{note.updatedAt!==note.createdAt?`Edited ${dateLabel(note.updatedAt)}`:`Created ${dateLabel(note.createdAt)}`}</small></div><div className="thought-actions"><button onClick={()=>void copyAll(note)} title="Copy title and complete note"><NoteIcon name="copy" size={16}/><span>Copy all</span></button><button disabled={busy} onClick={()=>void togglePin(note)} title={note.pinned?"Unpin":"Pin"}><NoteIcon name="pin" size={16}/></button><button disabled={busy} onClick={()=>openEdit(note)} title="Edit"><NoteIcon name="edit" size={16}/></button><button disabled={busy} className="thought-delete" onClick={()=>setPendingDelete(note)} title="Delete"><NoteIcon name="trash" size={16}/></button></div></div>
           <ul className="thought-points">{points.map((point,index)=><li key={`${note.id}-${index}`}><span>{String(index+1).padStart(2,"0")}</span><p>{point}</p></li>)}</ul>
           <div className="thought-original"><span>ORIGINAL NOTE</span><p>{note.body}</p></div>
         </div></div>
@@ -98,7 +107,8 @@ export default function ThoughtNotes({notes,onChange,onToast,onActivity}:Props){
     })}</div>:<div className="thought-empty"><span><NoteIcon name="sparkle" size={27}/></span><h3>{notes.length?"No matching thoughts":"Your idea space is ready"}</h3><p>{notes.length?"Try a different title or keyword.":"Save a title and your raw thought. PicSecure Renew will present it as a clear detail view."}</p>{!notes.length&&<button onClick={openNew}><NoteIcon name="plus" size={17}/>Write your first thought</button>}</div>}
     {editorOpen&&<div className="thought-modal-backdrop" onMouseDown={()=>setEditorOpen(false)}><section className="thought-editor" role="dialog" aria-modal="true" aria-label={editing?"Edit thought":"New thought"} onMouseDown={e=>e.stopPropagation()}>
       <header><div><span><NoteIcon name="sparkle" size={20}/></span><div><p>{editing?"REFINE THOUGHT":"NEW THOUGHT"}</p><h2>{editing?"Edit your idea":"Capture what is on your mind"}</h2></div></div><button onClick={()=>setEditorOpen(false)} aria-label="Close"><NoteIcon name="close"/></button></header>
-      <form onSubmit={save}><label><span>Thought title</span><input name="title" required maxLength={120} defaultValue={editing?.title||""} placeholder="Give this thought a clear name" autoFocus/></label><label><span>Your thought</span><textarea name="body" required maxLength={12000} defaultValue={editing?.body||""} placeholder="Write freely. Use new lines when you already have separate points…"/></label><div className="thought-editor-footer"><div><span>Card color</span><div className="thought-palette">{PALETTE.map(color=><button key={color} type="button" className={`${color} ${draftColor===color?"active":""}`} onClick={()=>setDraftColor(color)} aria-label={`${color} color`}/>)}</div></div><button className="thought-save" type="submit"><NoteIcon name={editing?"edit":"sparkle"} size={17}/>{editing?"Save changes":"Save thought"}</button></div></form>
+      <form onSubmit={event=>void save(event)}><label><span>Thought title</span><input name="title" required maxLength={120} disabled={busy} defaultValue={editing?.title||""} placeholder="Give this thought a clear name" autoFocus/></label><label><span>Your thought</span><textarea name="body" required maxLength={12000} disabled={busy} defaultValue={editing?.body||""} placeholder="Write freely. Use new lines when you already have separate points…"/></label><div className="thought-editor-footer"><div><span>Card color</span><div className="thought-palette">{PALETTE.map(color=><button key={color} type="button" disabled={busy} className={`${color} ${draftColor===color?"active":""}`} onClick={()=>setDraftColor(color)} aria-label={`${color} color`}/>)}</div></div><button className="thought-save" type="submit" disabled={busy}><NoteIcon name={editing?"edit":"sparkle"} size={17}/>{busy?"Saving to Firestore…":editing?"Save changes":"Save thought"}</button></div></form>
     </section></div>}
+    <ConfirmDialog open={Boolean(pendingDelete)} title="Delete this thought?" message={pendingDelete?`“${pendingDelete.title}” will be permanently removed from your Firestore cloud vault on every device.`:""} confirmLabel="Delete thought" busy={busy} onCancel={()=>setPendingDelete(null)} onConfirm={remove}/>
   </section>
 }
