@@ -36,7 +36,7 @@ async function main() {
   if (versions.some((version) => version !== packageJson.version)) {
     throw new Error(`Native release versions do not match: ${versions.join(", ")}`);
   }
-  const buildId = process.env.GITHUB_SHA || execFileSync("git", ["rev-parse", "HEAD"], { encoding: "utf8" }).trim();
+  const buildId = process.env.PICSECURE_RELEASE_SHA || process.env.GITHUB_SHA || execFileSync("git", ["rev-parse", "HEAD"], { encoding: "utf8" }).trim();
   const manifest = createManifest({
     buildId,
     version: packageJson.version,
