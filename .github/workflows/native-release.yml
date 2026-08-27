@@ -43,9 +43,12 @@ jobs:
         id: release
         shell: bash
         run: |
-          echo "release_sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
-          echo "version=$(node -p \"require('./package.json').version\")" >> "$GITHUB_OUTPUT"
-          echo "version_code=$(sed -nE 's/^[[:space:]]*versionCode[[:space:]]+([0-9]+).*/\1/p' android/app/build.gradle)" >> "$GITHUB_OUTPUT"
+          RELEASE_SHA=$(git rev-parse HEAD)
+          RELEASE_VERSION=$(node -p "require('./package.json').version")
+          RELEASE_VERSION_CODE=$(awk '$1 == "versionCode" { print $2; exit }' android/app/build.gradle)
+          echo "release_sha=$RELEASE_SHA" >> "$GITHUB_OUTPUT"
+          echo "version=$RELEASE_VERSION" >> "$GITHUB_OUTPUT"
+          echo "version_code=$RELEASE_VERSION_CODE" >> "$GITHUB_OUTPUT"
 
   windows-installer:
     needs: prepare-release
