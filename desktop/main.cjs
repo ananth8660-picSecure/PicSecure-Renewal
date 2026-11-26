@@ -70,3 +70,8 @@ ipcMain.handle("notifications:schedule",(_event,items)=>{
   persist();scan();return{scheduled:reminders.filter(r=>!r.delivered).length};
 });
 ipcMain.handle("notifications:clear",()=>{reminders=[];persist()});
+// Immediate alerts (Svara services monitor): shown now, not kept in the reminder schedule.
+ipcMain.handle("notifications:now",(_event,item)=>{
+  if(!item||typeof item!=="object")throw new Error("Invalid alert");
+  if(Notification.isSupported())new Notification({title:String(item.title).slice(0,120),body:String(item.body).slice(0,400),icon:path.join(__dirname,"../public/picsecure-renew-logo-512.png")}).show();
+});

@@ -173,6 +173,29 @@ an arbitrary Google Cloud project.
   again only when the user selects a project or presses Refresh; it never polls
   automatically in the background.
 
+## Svara services monitor
+
+**Svara services** (sidebar, mobile *More*, or as a header/bottom shortcut) lists every AI, web-search source, key and
+account PicSecure Svara uses: plan, free limits, reset cycle, what to watch and a manage link. It checks the Svara
+server's owner-only `/health?deep=1` when the app opens and every 6 hours while it runs (the desktop app runs in the
+tray, so it watches all day; on Android it checks whenever the app is opened or brought back), and **Check now** checks
+at once. A service that stops working, a wrong token or a server that does not answer sends a notification right
+away (once a day while it lasts); services Svara skips on purpose (Mistral, SambaNova, Google Search grounding) and
+"busy for a moment" are never alerts. The Google Play target-API deadline (31 August) alerts 30, 7 and 1 days before.
+
+Connect it once: in the Svara project run `npm run ai:deploy:free -- --skip-deploy --skip-keys` (makes the token),
+then `npm run ai:token` (copies it, never shows it) and paste it in **Svara services → Connection → Owner token**.
+No API key ever reaches this app — only ok / busy / off / fail and each service's reason.
+
+## Thoughts with images and PDFs
+
+Each thought can hold up to 12 images or PDFs (15 MB each; big photos are shrunk to 2400 px). Add them with the
+**Add images or PDFs** box in the editor — tap, drag and drop, or paste. Open a thought to see them; images open
+full screen (tap to zoom), PDFs open page by page inside the app, and **Save** keeps a copy on the device. Search and
+the **With files** filter include file names. Files are stored in your own private Firestore space
+(`users/{uid}/files/…`, owner-only rules, no Cloud Storage or card needed) and stay readable offline once opened.
+After updating, deploy the rules once: `npx firebase-tools deploy --only firestore:rules --project pic-renew-track`.
+
 ## Add GoDaddy and Zoho Mail
 
 - **GoDaddy domain:** Select `GoDaddy Domain` in Quick Setup, enter only the

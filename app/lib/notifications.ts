@@ -54,7 +54,8 @@ export async function clearRenewalNotifications(){
     ]);
     if(!Capacitor.isNativePlatform())return;
     const pending=await LocalNotifications.getPending();
-    if(pending.notifications.length)await LocalNotifications.cancel({notifications:pending.notifications.map(n=>({id:n.id}))});
+    const renewalsPending=pending.notifications.filter(n=>!(n.extra as {svaraAlert?:boolean}|undefined)?.svaraAlert);
+    if(renewalsPending.length)await LocalNotifications.cancel({notifications:renewalsPending.map(n=>({id:n.id}))});
   }catch{}
 }
 
@@ -77,10 +78,40 @@ export async function syncRenewalNotifications(items:RenewalReminderSource[]){
     if(!allowed)return{scheduled:0,available:true};
     await LocalNotifications.createChannel({id:"renewals",name:"Renewal reminders",description:"PicSecure Renew due-date reminders",importance:5,visibility:1,vibration:true});
     const pending=await LocalNotifications.getPending();
-    if(pending.notifications.length)await LocalNotifications.cancel({notifications:pending.notifications.map(n=>({id:n.id}))});
+    const renewalsPending=pending.notifications.filter(n=>!(n.extra as {svaraAlert?:boolean}|undefined)?.svaraAlert);
+    if(renewalsPending.length)await LocalNotifications.cancel({notifications:renewalsPending.map(n=>({id:n.id}))});
     if(reminders.length)await LocalNotifications.schedule({notifications:reminders.map(r=>({
       id:stableNumber(r.id),title:r.title,body:r.body,channelId:"renewals",schedule:{at:new Date(r.at),allowWhileIdle:true},extra:{reminderId:r.id}
     }))});
     return{scheduled:reminders.length,available:true};
   }catch{return{scheduled:0,available:false}}
+}
+
+/** Shows one alert now (Svara services monitor). Separate from renewal reminders: syncing renewals never cancels it. */
+export async function notifyNow(key:string,title:string,body:string){
+  if(typeof window==="undefined")return false;
+  title=title.slice(0,120);body=body.slice(0,400);
+  if(window.picSecureDesktop){
+    if(!window.picSecureDesktop.notifyNow)return false;
+    try{await window.picSecureDesktop.notifyNow({title,body});return true}catch{return false}
+  }
+  if(window.__TAURI_INTERNALS__){try{const{invoke}=await import("@tauri-apps/api/core");await invoke("notify_now",{title,body});return true}catch{return false}}
+  try{
+    const [{Capacitor},{LocalNotifications}]=await Promise.all([
+      import("@capacitor/core"),import("@capacitor/local-notifications")
+    ]);
+    if(Capacitor.isNativePlatform()){
+      if(!await requestNotificationPermission())return false;
+      await LocalNotifications.createChannel({id:"svara-services",name:"Svara services",description:"A Svara AI service, key or free limit needs attention",importance:4,visibility:1,vibration:true});
+      await LocalNotifications.schedule({notifications:[{id:stableNumber(`svara:${key}`),title,body,channelId:"svara-services",schedule:{at:new Date(Date.now()+1500),allowWhileIdle:true},extra:{svaraAlert:true,key}}]});
+      return true;
+    }
+  }catch{}
+  try{
+    if(!("Notification" in window))return false;
+    const allowed=Notification.permission==="granted"||(Notification.permission!=="denied"&&await Notification.requestPermission()==="granted");
+    if(!allowed)return false;
+    new Notification(title,{body,tag:`svara:${key}`});
+    return true;
+  }catch{return false}
 }

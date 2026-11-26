@@ -67,6 +67,36 @@ service cloud.firestore {
       allow delete: if isVaultOwner(userId);
     }
 
+    // Images and PDFs attached to thoughts: each file is stored as chunks under 1 MiB
+    // (users/{uid}/files/{fileId}/chunks/{index}). Only the owner can read, add or delete
+    // them; chunks are never changed in place and cannot be listed.
+    function isValidFileChunk(chunkId) {
+      let data = request.resource.data;
+      return data.keys().hasAll(['data', 'i', 'n'])
+        && data.keys().hasOnly(['data', 'i', 'n'])
+        && data.data is bytes
+        && data.data.size() >= 1
+        && data.data.size() <= 921600
+        && data.i is int
+        && data.n is int
+        && data.n >= 1
+        && data.n <= 18
+        && data.i >= 0
+        && data.i < data.n
+        && chunkId == string(data.i);
+    }
+
+    match /users/{userId}/files/{fileId}/chunks/{chunkId} {
+      allow get: if isVaultOwner(userId);
+      allow list: if false;
+      allow create: if isVaultOwner(userId)
+        && fileId.size() >= 8
+        && fileId.size() <= 64
+        && isValidFileChunk(chunkId);
+      allow update: if false;
+      allow delete: if isVaultOwner(userId);
+    }
+
     // Deny every unrecognized collection and document by default.
     match /{document=**} {
       allow read, write: if false;

@@ -45,9 +45,10 @@ export function getFirebaseServices(){
     const app=getApps().length?getApp():initializeApp(publicConfig());
     const auth=getAuth(app);
     await setPersistence(auth,browserLocalPersistence);
+    // 400 MB on-device cache: thoughts and the images / PDFs opened on this device stay readable offline.
     let db:Firestore;
     try{
-      db=initializeFirestore(app,{localCache:persistentLocalCache({tabManager:persistentMultipleTabManager()})});
+      db=initializeFirestore(app,{localCache:persistentLocalCache({tabManager:persistentMultipleTabManager(),cacheSizeBytes:400*1024*1024})});
     }catch{
       db=getFirestore(app);
     }

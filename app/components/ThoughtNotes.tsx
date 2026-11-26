@@ -1,7 +1,10 @@
 "use client";
+/* eslint-disable @next/next/no-img-element -- previews of files picked on this device (blob: URLs) */
 
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { ChangeEvent, ClipboardEvent, DragEvent, FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import ConfirmDialog from "./ConfirmDialog";
+import { FileGallery, FileIcon, FileViewer } from "./ThoughtFiles";
+import { ACCEPT, MAX_FILES_PER_THOUGHT, deleteFiles, fileSize, isImage, prepareFile, uploadFile, type PendingFile, type ThoughtFile } from "../lib/thought-files";
 
 export type ThoughtNote = {
   id:string;
@@ -11,7 +14,10 @@ export type ThoughtNote = {
   pinned:boolean;
   createdAt:string;
   updatedAt:string;
+  /** Images and PDFs (bytes kept in the owner's private Firestore space, see lib/thought-files). */
+  files?:ThoughtFile[];
 };
+type ThoughtFilter="all"|"pinned"|"files";
 
 type Props={
   notes:ThoughtNote[];
@@ -53,29 +59,66 @@ function dateLabel(value:string){
 
 export default function ThoughtNotes({notes,cloudReady,onChange,onRequireCloud,onToast,onActivity}:Props){
   const [editorOpen,setEditorOpen]=useState(false),[editing,setEditing]=useState<ThoughtNote|null>(null),[query,setQuery]=useState(""),[expanded,setExpanded]=useState<Set<string>>(new Set()),[draftColor,setDraftColor]=useState(PALETTE[0]),[busy,setBusy]=useState(false),[pendingDelete,setPendingDelete]=useState<ThoughtNote|null>(null);
-  const sorted=useMemo(()=>notes.filter(note=>`${note.title} ${note.body}`.toLowerCase().includes(query.trim().toLowerCase())).sort((a,b)=>Number(b.pinned)-Number(a.pinned)||new Date(b.updatedAt).getTime()-new Date(a.updatedAt).getTime()),[notes,query]);
+  const [filter,setFilter]=useState<ThoughtFilter>("all"),[kept,setKept]=useState<ThoughtFile[]>([]),[pending,setPending]=useState<PendingFile[]>([]),[removed,setRemoved]=useState<ThoughtFile[]>([]),[progress,setProgress]=useState(""),[dragging,setDragging]=useState(false),[viewer,setViewer]=useState<{files:ThoughtFile[];index:number}|null>(null);
+  const picker=useRef<HTMLInputElement|null>(null),pendingRef=useRef<PendingFile[]>([]);
+  useEffect(()=>{pendingRef.current=pending},[pending]);
+  useEffect(()=>()=>pendingRef.current.forEach(f=>URL.revokeObjectURL(f.url)),[]);
+  const search=query.trim().toLowerCase();
+  const fileTotal=notes.reduce((n,note)=>n+(note.files?.length??0),0),pinnedTotal=notes.filter(note=>note.pinned).length;
+  const sorted=useMemo(()=>notes.filter(note=>(filter==="all"||(filter==="pinned"?note.pinned:(note.files?.length??0)>0))&&search.split(/\s+/).filter(Boolean).every(word=>`${note.title} ${note.body} ${(note.files??[]).map(f=>f.name).join(" ")}`.toLowerCase().includes(word))).sort((a,b)=>Number(b.pinned)-Number(a.pinned)||new Date(b.updatedAt).getTime()-new Date(a.updatedAt).getTime()),[notes,filter,search]);
   useEffect(()=>{
-    const closeTopOverlay=(event:Event)=>{if(!editorOpen)return;setEditorOpen(false);setEditing(null);event.preventDefault()};
+    const closeTopOverlay=(event:Event)=>{if(!editorOpen||busy)return;setEditorOpen(false);setEditing(null);event.preventDefault()};
     window.addEventListener("picsecure:close-top-overlay",closeTopOverlay);
     return()=>window.removeEventListener("picsecure:close-top-overlay",closeTopOverlay)
-  },[editorOpen]);
+  },[busy,editorOpen]);
 
   function requireCloud(){onToast("Sign in to Private Cloud Vault before saving thoughts.","warning");onRequireCloud()}
-  function openNew(){if(!cloudReady){requireCloud();return}setEditing(null);setDraftColor(PALETTE[notes.length%PALETTE.length]);setEditorOpen(true)}
-  function openEdit(note:ThoughtNote){if(!cloudReady){requireCloud();return}setEditing(note);setDraftColor(note.color);setEditorOpen(true)}
+  function resetFiles(files:ThoughtFile[]=[]){pending.forEach(f=>URL.revokeObjectURL(f.url));setPending([]);setKept(files);setRemoved([]);setProgress("")}
+  function closeEditor(){if(busy)return;setEditorOpen(false);setEditing(null);resetFiles()}
+  function openNew(){if(!cloudReady){requireCloud();return}setEditing(null);resetFiles();setDraftColor(PALETTE[notes.length%PALETTE.length]);setEditorOpen(true)}
+  function openEdit(note:ThoughtNote){if(!cloudReady){requireCloud();return}setEditing(note);resetFiles(note.files??[]);setDraftColor(note.color);setEditorOpen(true)}
+  async function addFiles(list:FileList|File[]){
+    const picked=[...list];if(!picked.length)return;
+    const room=MAX_FILES_PER_THOUGHT-kept.length-pending.length;
+    if(room<=0){onToast(`A thought can hold up to ${MAX_FILES_PER_THOUGHT} files.`,"warning");return}
+    if(picked.length>room)onToast(`Only ${room} more ${room===1?"file fits":"files fit"} in this thought.`,"warning");
+    setProgress("Preparing files…");
+    const ready:PendingFile[]=[];
+    for(const file of picked.slice(0,room)){try{ready.push(await prepareFile(file))}catch(error){onToast(error instanceof Error?error.message:"This file could not be added.","error")}}
+    setPending(current=>[...current,...ready]);setProgress("");
+  }
+  function onPick(e:ChangeEvent<HTMLInputElement>){if(e.target.files)void addFiles(e.target.files);e.target.value=""}
+  function onDrop(e:DragEvent<HTMLElement>){e.preventDefault();setDragging(false);if(!busy&&e.dataTransfer.files.length)void addFiles(e.dataTransfer.files)}
+  function onPaste(e:ClipboardEvent<HTMLElement>){const files=[...e.clipboardData.files].filter(f=>f.type.startsWith("image/")||f.type==="application/pdf");if(files.length&&!busy){e.preventDefault();void addFiles(files)}}
+  function dropPending(id:string){setPending(current=>{const gone=current.find(f=>f.meta.id===id);if(gone)URL.revokeObjectURL(gone.url);return current.filter(f=>f.meta.id!==id)})}
+  function dropKept(file:ThoughtFile){setKept(current=>current.filter(f=>f.id!==file.id));setRemoved(current=>[...current,file])}
   async function save(e:FormEvent<HTMLFormElement>){
     e.preventDefault();const data=new FormData(e.currentTarget),title=String(data.get("title")||"").trim(),body=String(data.get("body")||"").trim();if(!title||!body)return;
     const now=new Date().toISOString();
     if(!cloudReady){requireCloud();return}
     setBusy(true);
+    const uploaded:ThoughtFile[]=[];
     try{
-      if(editing){const next={...editing,title,body,color:draftColor,updatedAt:now};await onChange(notes.map(note=>note.id===editing.id?next:note));onActivity?.("Thought updated",title);onToast("Thought updated securely in Firestore.")}
-      else{const next:ThoughtNote={id:crypto.randomUUID(),title,body,color:draftColor,pinned:false,createdAt:now,updatedAt:now};await onChange([next,...notes]);setExpanded(current=>new Set(current).add(next.id));onActivity?.("New thought saved",title);onToast("Thought saved securely to Firestore.")}
+      const totalBytes=pending.reduce((n,f)=>n+f.meta.size,0);let doneBytes=0;
+      for(const file of pending){
+        await uploadFile(file,part=>setProgress(`Uploading ${uploaded.length+1} of ${pending.length} · ${Math.round((doneBytes+file.meta.size*part)/Math.max(1,totalBytes)*100)}%`));
+        uploaded.push(file.meta);doneBytes+=file.meta.size;
+      }
+      setProgress(pending.length?"Saving thought…":"");
+      const files=[...kept,...uploaded];
+      if(editing){const next={...editing,title,body,color:draftColor,updatedAt:now,files};await onChange(notes.map(note=>note.id===editing.id?next:note));onActivity?.("Thought updated",title);onToast("Thought updated securely in Firestore.")}
+      else{const next:ThoughtNote={id:crypto.randomUUID(),title,body,color:draftColor,pinned:false,createdAt:now,updatedAt:now,files};await onChange([next,...notes]);setExpanded(current=>new Set(current).add(next.id));onActivity?.("New thought saved",title);onToast("Thought saved securely to Firestore.")}
+      void deleteFiles(removed);
+      pending.forEach(f=>URL.revokeObjectURL(f.url));setPending([]);setRemoved([]);
       setEditorOpen(false);setEditing(null)
-    }catch(error){onToast(error instanceof Error?error.message:"Thought could not be saved to Firestore.","error")}
-    finally{setBusy(false)}
+    }catch(error){
+      // Nothing half-saved: files uploaded for a thought that did not save are removed again.
+      void deleteFiles(uploaded);
+      onToast(error instanceof Error?error.message:"Thought could not be saved to Firestore.","error")
+    }
+    finally{setBusy(false);setProgress("")}
   }
-  async function remove(){const note=pendingDelete;if(!note)return;setBusy(true);try{await onChange(notes.filter(item=>item.id!==note.id));onActivity?.("Thought deleted",note.title);onToast("Thought deleted securely from Firestore.");setPendingDelete(null)}catch(error){onToast(error instanceof Error?error.message:"Thought could not be deleted from Firestore.","error")}finally{setBusy(false)}}
+  async function remove(){const note=pendingDelete;if(!note)return;setBusy(true);try{await onChange(notes.filter(item=>item.id!==note.id));void deleteFiles(note.files??[]);onActivity?.("Thought deleted",note.title);onToast("Thought deleted securely from Firestore.");setPendingDelete(null)}catch(error){onToast(error instanceof Error?error.message:"Thought could not be deleted from Firestore.","error")}finally{setBusy(false)}}
   async function togglePin(note:ThoughtNote){if(!cloudReady){requireCloud();return}setBusy(true);try{await onChange(notes.map(item=>item.id===note.id?{...item,pinned:!item.pinned,updatedAt:new Date().toISOString()}:item));onToast(note.pinned?"Thought removed from pinned.":"Thought pinned to the top.")}catch(error){onToast(error instanceof Error?error.message:"Thought could not be updated in Firestore.","error")}finally{setBusy(false)}}
   function toggleExpand(id:string){setExpanded(current=>{const next=new Set(current);if(next.has(id))next.delete(id);else next.add(id);return next})}
   async function copyAll(note:ThoughtNote){try{await navigator.clipboard.writeText(`${note.title}\n\n${note.body}`);onToast("Title and complete thought copied.")}catch{onToast("Clipboard permission is unavailable on this device.","error")}}
@@ -90,25 +133,38 @@ export default function ThoughtNotes({notes,cloudReady,onChange,onRequireCloud,o
       <div><NoteIcon name="search" size={18}/><input value={query} onChange={e=>setQuery(e.target.value)} placeholder="Search titles or details…"/></div>
       <span><strong>{notes.length}</strong> {notes.length===1?"thought":"thoughts"} saved</span>
     </div>
+    <div className="thought-filters" role="tablist" aria-label="Show thoughts">{([["all","All",notes.length],["pinned","Pinned",pinnedTotal],["files","With files",notes.filter(n=>(n.files?.length??0)>0).length]] as [ThoughtFilter,string,number][]).map(([id,label,n])=><button key={id} type="button" role="tab" aria-selected={filter===id} className={filter===id?"active":""} onClick={()=>setFilter(id)}>{label}<b>{n}</b></button>)}<small>{fileTotal} {fileTotal===1?"file":"files"} attached</small></div>
     {sorted.length?<div className="thought-list">{sorted.map(note=>{
       const isOpen=expanded.has(note.id),points=smartPoints(note.body);
       return <article key={note.id} className={`thought-card thought-${note.color} ${isOpen?"expanded":""}`}>
         <button className="thought-summary" onClick={()=>toggleExpand(note.id)} aria-expanded={isOpen}>
           <span className="thought-color"><NoteIcon name="note" size={20}/></span>
-          <span className="thought-title"><span>{note.pinned&&<i><NoteIcon name="pin" size={12}/>Pinned</i>}<time>Added {dateLabel(note.createdAt)}</time></span><strong>{note.title}</strong><small>{points[0]||"Open this thought to read the details."}</small></span>
+          <span className="thought-title"><span>{note.pinned&&<i><NoteIcon name="pin" size={12}/>Pinned</i>}<time>Added {dateLabel(note.createdAt)}</time></span><strong>{note.title}</strong><small>{points[0]||"Open this thought to read the details."}</small>{(note.files?.length??0)>0&&<em className="thought-file-count"><FileIcon name="clip" size={12}/>{note.files!.length} {note.files!.length===1?"file":"files"}{note.files!.some(isImage)&&!note.files!.every(isImage)?" · images & PDFs":note.files!.every(isImage)?" · images":" · PDFs"}</em>}</span>
           <span className="thought-chevron"><NoteIcon name="chevron" size={19}/></span>
         </button>
         <div className="thought-expand"><div className="thought-expand-inner">
           <div className="thought-detail-head"><div><span>SMART DETAIL VIEW</span><small>{note.updatedAt!==note.createdAt?`Edited ${dateLabel(note.updatedAt)}`:`Created ${dateLabel(note.createdAt)}`}</small></div><div className="thought-actions"><button onClick={()=>void copyAll(note)} title="Copy title and complete note"><NoteIcon name="copy" size={16}/><span>Copy all</span></button><button disabled={busy} onClick={()=>void togglePin(note)} title={note.pinned?"Unpin":"Pin"}><NoteIcon name="pin" size={16}/></button><button disabled={busy} onClick={()=>openEdit(note)} title="Edit"><NoteIcon name="edit" size={16}/></button><button disabled={busy} className="thought-delete" onClick={()=>setPendingDelete(note)} title="Delete"><NoteIcon name="trash" size={16}/></button></div></div>
+          {(note.files?.length??0)>0&&<FileGallery files={note.files!} onOpen={index=>setViewer({files:note.files!,index})}/>}
           <ul className="thought-points">{points.map((point,index)=><li key={`${note.id}-${index}`}><span>{String(index+1).padStart(2,"0")}</span><p>{point}</p></li>)}</ul>
           <div className="thought-original"><span>ORIGINAL NOTE</span><p>{note.body}</p></div>
         </div></div>
       </article>
-    })}</div>:<div className="thought-empty"><span><NoteIcon name="sparkle" size={27}/></span><h3>{notes.length?"No matching thoughts":"Your idea space is ready"}</h3><p>{notes.length?"Try a different title or keyword.":"Save a title and your raw thought. PicSecure Renew will present it as a clear detail view."}</p>{!notes.length&&<button onClick={openNew}><NoteIcon name="plus" size={17}/>Write your first thought</button>}</div>}
-    {editorOpen&&<div className="thought-modal-backdrop" onMouseDown={()=>setEditorOpen(false)}><section className="thought-editor" role="dialog" aria-modal="true" aria-label={editing?"Edit thought":"New thought"} onMouseDown={e=>e.stopPropagation()}>
-      <header><div><span><NoteIcon name="sparkle" size={20}/></span><div><p>{editing?"REFINE THOUGHT":"NEW THOUGHT"}</p><h2>{editing?"Edit your idea":"Capture what is on your mind"}</h2></div></div><button onClick={()=>setEditorOpen(false)} aria-label="Close"><NoteIcon name="close"/></button></header>
-      <form onSubmit={event=>void save(event)}><label><span>Thought title</span><input name="title" required maxLength={120} disabled={busy} defaultValue={editing?.title||""} placeholder="Give this thought a clear name" autoFocus/></label><label><span>Your thought</span><textarea name="body" required maxLength={12000} disabled={busy} defaultValue={editing?.body||""} placeholder="Write freely. Use new lines when you already have separate points…"/></label><div className="thought-editor-footer"><div><span>Card color</span><div className="thought-palette">{PALETTE.map(color=><button key={color} type="button" disabled={busy} className={`${color} ${draftColor===color?"active":""}`} onClick={()=>setDraftColor(color)} aria-label={`${color} color`}/>)}</div></div><button className="thought-save" type="submit" disabled={busy}><NoteIcon name={editing?"edit":"sparkle"} size={17}/>{busy?"Saving to Firestore…":editing?"Save changes":"Save thought"}</button></div></form>
+    })}</div>:<div className="thought-empty"><span><NoteIcon name="sparkle" size={27}/></span><h3>{notes.length?"No matching thoughts":"Your idea space is ready"}</h3><p>{notes.length?(filter!=="all"?"Nothing here for this filter yet — choose All, or try another keyword.":"Try a different title, keyword or file name."):"Save a title and your raw thought. PicSecure Renew will present it as a clear detail view."}</p>{!notes.length&&<button onClick={openNew}><NoteIcon name="plus" size={17}/>Write your first thought</button>}</div>}
+    {editorOpen&&<div className="thought-modal-backdrop" onMouseDown={closeEditor}><section className="thought-editor" role="dialog" aria-modal="true" aria-label={editing?"Edit thought":"New thought"} onMouseDown={e=>e.stopPropagation()}>
+      <header><div><span><NoteIcon name="sparkle" size={20}/></span><div><p>{editing?"REFINE THOUGHT":"NEW THOUGHT"}</p><h2>{editing?"Edit your idea":"Capture what is on your mind"}</h2></div></div><button onClick={closeEditor} disabled={busy} aria-label="Close"><NoteIcon name="close"/></button></header>
+      <form onSubmit={event=>void save(event)}><label><span>Thought title</span><input name="title" required maxLength={120} disabled={busy} defaultValue={editing?.title||""} placeholder="Give this thought a clear name" autoFocus/></label><label><span>Your thought</span><textarea name="body" required maxLength={12000} disabled={busy} defaultValue={editing?.body||""} placeholder="Write freely. Use new lines when you already have separate points…" onPaste={onPaste}/></label>
+        <div className={`thought-attach ${dragging?"dragging":""}`} onDragOver={e=>{e.preventDefault();if(!busy)setDragging(true)}} onDragLeave={()=>setDragging(false)} onDrop={onDrop}>
+          <input ref={picker} type="file" accept={ACCEPT} multiple hidden onChange={onPick}/>
+          <button type="button" className="thought-attach-add" disabled={busy||kept.length+pending.length>=MAX_FILES_PER_THOUGHT} onClick={()=>picker.current?.click()}><FileIcon name="clip" size={17}/><span><strong>Add images or PDFs</strong><small>Tap, drop or paste · up to {MAX_FILES_PER_THOUGHT} files, {fileSize(15*1024*1024)} each · big photos are shrunk</small></span></button>
+          {(kept.length>0||pending.length>0)&&<div className="thought-attach-list">
+            {kept.map(f=><span key={f.id} className="thought-attach-item"><FileIcon name={isImage(f)?"image":"pdf"} size={15}/><b>{f.name}</b><small>{fileSize(f.size)}</small><button type="button" disabled={busy} onClick={()=>dropKept(f)} aria-label={`Remove ${f.name}`}><FileIcon name="close" size={13}/></button></span>)}
+            {pending.map(f=><span key={f.meta.id} className="thought-attach-item new">{isImage(f.meta)?<img src={f.url} alt=""/>:<FileIcon name="pdf" size={15}/>}<b>{f.meta.name}</b><small>{fileSize(f.meta.size)} · new</small><button type="button" disabled={busy} onClick={()=>dropPending(f.meta.id)} aria-label={`Remove ${f.meta.name}`}><FileIcon name="close" size={13}/></button></span>)}
+          </div>}
+          {progress&&<p className="thought-attach-progress" role="status">{progress}</p>}
+        </div>
+        <div className="thought-editor-footer"><div><span>Card color</span><div className="thought-palette">{PALETTE.map(color=><button key={color} type="button" disabled={busy} className={`${color} ${draftColor===color?"active":""}`} onClick={()=>setDraftColor(color)} aria-label={`${color} color`}/>)}</div></div><button className="thought-save" type="submit" disabled={busy}><NoteIcon name={editing?"edit":"sparkle"} size={17}/>{busy?(progress||"Saving to Firestore…"):editing?"Save changes":"Save thought"}</button></div></form>
     </section></div>}
-    <ConfirmDialog open={Boolean(pendingDelete)} title="Delete this thought?" message={pendingDelete?`“${pendingDelete.title}” will be permanently removed from your Firestore cloud vault on every device.`:""} confirmLabel="Delete thought" busy={busy} onCancel={()=>setPendingDelete(null)} onConfirm={remove}/>
+    {viewer&&<FileViewer files={viewer.files} index={viewer.index} onIndex={index=>setViewer(v=>v&&{...v,index})} onClose={()=>setViewer(null)}/>}
+    <ConfirmDialog open={Boolean(pendingDelete)} title="Delete this thought?" message={pendingDelete?`“${pendingDelete.title}” ${pendingDelete.files?.length?` and its ${pendingDelete.files.length} attached ${pendingDelete.files.length===1?"file":"files"}`:""} will be permanently removed from your Firestore cloud vault on every device.`:""} confirmLabel="Delete thought" busy={busy} onCancel={()=>setPendingDelete(null)} onConfirm={remove}/>
   </section>
 }

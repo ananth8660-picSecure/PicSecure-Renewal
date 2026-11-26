@@ -43,6 +43,14 @@ fn clear_notifications(state: State<'_, ReminderState>) {
     state.delivered.lock().expect("notification delivery state poisoned").clear();
 }
 
+/// Immediate alert (Svara services monitor): shown now, not kept in the reminder schedule.
+#[tauri::command]
+fn notify_now(app: AppHandle, title: String, body: String) {
+    let title: String = title.chars().take(120).collect();
+    let body: String = body.chars().take(400).collect();
+    let _ = app.notification().builder().title(&title).body(&body).show();
+}
+
 fn start_notification_clock(app: AppHandle) {
     thread::spawn(move || loop {
         let now = SystemTime::now()
@@ -84,7 +92,7 @@ pub fn run() {
         .manage(ReminderState::default())
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_autostart::Builder::new().args(["--background"]).build())
-        .invoke_handler(tauri::generate_handler![schedule_notifications, clear_notifications])
+        .invoke_handler(tauri::generate_handler![schedule_notifications, clear_notifications, notify_now])
         .setup(|app| {
             let open = MenuItem::with_id(app, "open", "Open PicSecure Renew", true, None::<&str>)?;
             let quit = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
